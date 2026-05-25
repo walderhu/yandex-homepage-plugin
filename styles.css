@@ -69,11 +69,11 @@ a {
 
 .brand-logo {
   position: absolute;
-  bottom: -58px;
+  bottom: -134px;
   left: 50%;
   display: block;
-  width: 760px;
-  height: 507px;
+  width: 945px;
+  height: 630px;
   object-fit: contain;
   transform: translateX(-50%);
 }
