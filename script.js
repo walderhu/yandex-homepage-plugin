@@ -18,10 +18,15 @@ const defaultTiles = [
 
 const tilesEl = document.querySelector(".tiles");
 const menuEl = document.querySelector(".tile-menu");
+const groupDialogEl = document.querySelector(".group-dialog");
+const groupTitleEl = document.querySelector(".group-dialog-title");
+const groupTilesEl = document.querySelector(".group-tiles");
+const groupCloseButton = document.querySelector(".group-close");
 const dialogEl = document.querySelector(".tile-dialog");
 const formEl = document.querySelector(".tile-form");
 const dialogTitleEl = document.querySelector("#tile-dialog-title");
 const titleInput = document.querySelector(".tile-title-input");
+const titleStatus = document.querySelector(".tile-title-status");
 const urlInput = document.querySelector(".tile-url-input");
 const imageInput = document.querySelector(".tile-image-input");
 const previewImg = document.querySelector(".tile-preview-img");
@@ -32,6 +37,13 @@ const cancelButton = document.querySelector(".tile-cancel");
 let tiles = loadTiles();
 let activeIndex = null;
 let selectedImage = "";
+let titleRequestController = null;
+let titleRequestTimer = null;
+let titleWasEnteredByUser = false;
+let lastGeneratedTitle = "";
+let draggedIndex = null;
+let activeGroupIndex = null;
+let draggedGroupTileIndex = null;
 
 renderTiles();
 
@@ -42,7 +54,61 @@ tilesEl.addEventListener("click", (event) => {
   if (tileEl.classList.contains("placeholder")) {
     event.preventDefault();
     openTileDialog(null);
+    return;
   }
+
+  const index = Number(tileEl.dataset.index);
+  const tile = tiles[index];
+  if (tile?.type === "group") {
+    event.preventDefault();
+    openGroupDialog(index);
+  }
+});
+
+tilesEl.addEventListener("dragstart", (event) => {
+  const tileEl = event.target.closest(".tile[data-index]");
+  const index = Number(tileEl?.dataset.index);
+  if (!tileEl || tiles[index]?.type === "group") {
+    event.preventDefault();
+    return;
+  }
+
+  draggedIndex = index;
+  tileEl.classList.add("is-dragging");
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", String(index));
+});
+
+tilesEl.addEventListener("dragover", (event) => {
+  const targetEl = getDropTarget(event.target);
+  if (!targetEl) return;
+
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "move";
+  clearDropTarget();
+  targetEl.classList.add("is-drop-target");
+});
+
+tilesEl.addEventListener("dragleave", (event) => {
+  const tileEl = event.target.closest(".tile");
+  if (tileEl && !tileEl.contains(event.relatedTarget)) {
+    tileEl.classList.remove("is-drop-target");
+  }
+});
+
+tilesEl.addEventListener("drop", (event) => {
+  const targetEl = getDropTarget(event.target);
+  clearDropTarget();
+  if (!targetEl) return;
+
+  event.preventDefault();
+  createOrExtendGroup(draggedIndex, Number(targetEl.dataset.index));
+});
+
+tilesEl.addEventListener("dragend", () => {
+  tilesEl.querySelector(".is-dragging")?.classList.remove("is-dragging");
+  clearDropTarget();
+  draggedIndex = null;
 });
 
 tilesEl.addEventListener("contextmenu", (event) => {
@@ -65,10 +131,19 @@ menuEl.addEventListener("click", (event) => {
   hideMenu();
 
   if (action === "edit") {
-    openTileDialog(tileIndex);
+    if (tiles[tileIndex]?.type === "group") {
+      renameGroup(tiles[tileIndex]);
+    } else {
+      openTileDialog(tileIndex);
+    }
   }
 
   if (action === "delete") {
+    if (tiles[tileIndex]?.type === "group"
+      && !window.confirm("Удалить группу и все плитки внутри?")) {
+      return;
+    }
+
     tiles.splice(tileIndex, 1);
     saveTiles();
     renderTiles();
@@ -88,6 +163,53 @@ document.addEventListener("keydown", (event) => {
 });
 
 dialogEl.addEventListener("paste", handleDialogPaste);
+dialogEl.addEventListener("close", resetTitleLookup);
+groupCloseButton.addEventListener("click", () => groupDialogEl.close());
+groupDialogEl.addEventListener("click", (event) => {
+  if (event.target === groupDialogEl) groupDialogEl.close();
+});
+groupDialogEl.addEventListener("close", () => {
+  activeGroupIndex = null;
+  draggedGroupTileIndex = null;
+  groupDialogEl.classList.remove("is-extract-target");
+});
+
+groupTilesEl.addEventListener("dragstart", (event) => {
+  const tileEl = event.target.closest(".tile[data-group-index]");
+  if (!tileEl) return;
+
+  draggedGroupTileIndex = Number(tileEl.dataset.groupIndex);
+  tileEl.classList.add("is-dragging");
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", String(draggedGroupTileIndex));
+});
+
+groupDialogEl.addEventListener("dragover", (event) => {
+  if (draggedGroupTileIndex === null || event.target.closest(".group-tiles")) return;
+
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "move";
+  groupDialogEl.classList.add("is-extract-target");
+});
+
+groupDialogEl.addEventListener("dragleave", (event) => {
+  if (!groupDialogEl.contains(event.relatedTarget)) {
+    groupDialogEl.classList.remove("is-extract-target");
+  }
+});
+
+groupDialogEl.addEventListener("drop", (event) => {
+  if (draggedGroupTileIndex === null || event.target.closest(".group-tiles")) return;
+
+  event.preventDefault();
+  extractTileFromGroup(draggedGroupTileIndex);
+});
+
+groupTilesEl.addEventListener("dragend", () => {
+  groupTilesEl.querySelector(".is-dragging")?.classList.remove("is-dragging");
+  groupDialogEl.classList.remove("is-extract-target");
+  draggedGroupTileIndex = null;
+});
 
 cancelButton.addEventListener("click", () => {
   dialogEl.close();
@@ -96,6 +218,20 @@ cancelButton.addEventListener("click", () => {
 urlInput.addEventListener("input", () => {
   if (!selectedImage) {
     updateImagePreview(faviconUrl(normalizeUrl(urlInput.value.trim())));
+  }
+
+  queueTitleLookup();
+});
+
+titleInput.addEventListener("input", () => {
+  titleWasEnteredByUser = titleInput.value.trim() !== "" && titleInput.value !== lastGeneratedTitle;
+  if (titleWasEnteredByUser) {
+    resetTitleLookup();
+    return;
+  }
+
+  if (!titleWasEnteredByUser && urlInput.value.trim()) {
+    queueTitleLookup();
   }
 });
 
@@ -142,13 +278,21 @@ function loadTiles() {
   try {
     const savedTiles = JSON.parse(localStorage.getItem(TILE_STORAGE_KEY));
     if (Array.isArray(savedTiles)) {
-      return savedTiles.filter(Boolean);
+      const cleanTiles = savedTiles.filter((tile) => tile && !isTestTile(tile));
+      if (cleanTiles.length !== savedTiles.length) {
+        localStorage.setItem(TILE_STORAGE_KEY, JSON.stringify(cleanTiles));
+      }
+      return cleanTiles;
     }
   } catch {
     localStorage.removeItem(TILE_STORAGE_KEY);
   }
 
   return defaultTiles;
+}
+
+function isTestTile(tile) {
+  return tile.url?.startsWith("https://example.com/?test-tile=");
 }
 
 function saveTiles() {
@@ -162,10 +306,20 @@ function renderTiles() {
 }
 
 function renderTile(tile, index) {
+  if (tile.type === "group") {
+    return renderGroupTile(tile, index);
+  }
+
+  return renderLinkTile(tile, index, true);
+}
+
+function renderLinkTile(tile, index, draggable, groupIndex = null) {
   const link = document.createElement("a");
   link.className = "tile";
   link.href = tile.url;
-  link.dataset.index = index;
+  link.draggable = draggable;
+  if (index !== null) link.dataset.index = index;
+  if (groupIndex !== null) link.dataset.groupIndex = groupIndex;
 
   const icon = document.createElement("span");
   icon.className = "icon tile-photo";
@@ -184,6 +338,29 @@ function renderTile(tile, index) {
   return link;
 }
 
+function renderGroupTile(group, index) {
+  const button = document.createElement("button");
+  button.className = "tile group";
+  button.type = "button";
+  button.dataset.index = index;
+
+  const icon = document.createElement("span");
+  icon.className = "icon group-photo";
+  group.tiles.slice(0, 4).forEach((tile) => {
+    const img = document.createElement("img");
+    img.src = tile.image || faviconUrl(tile.url) || DEFAULT_PLACEHOLDER_IMAGE;
+    img.alt = "";
+    icon.append(img);
+  });
+
+  const caption = document.createElement("span");
+  caption.className = "caption";
+  caption.textContent = group.title;
+
+  button.append(icon, caption);
+  return button;
+}
+
 function renderPlaceholderTile() {
   const button = document.createElement("button");
   button.className = "tile placeholder";
@@ -198,13 +375,88 @@ function openTileDialog(index) {
 
   dialogTitleEl.textContent = tile.url ? "Изменить плитку" : "Добавить плитку";
   titleInput.value = tile.title || "";
+  titleWasEnteredByUser = Boolean(tile.title);
+  lastGeneratedTitle = "";
+  resetTitleLookup();
   urlInput.value = tile.url || "";
   imageInput.value = "";
   selectedImage = tile.image || "";
   updateImagePreview(selectedImage || faviconUrl(tile.url || ""));
 
   dialogEl.showModal();
-  titleInput.focus();
+  (tile.url ? titleInput : urlInput).focus();
+}
+
+function openGroupDialog(index) {
+  const group = tiles[index];
+  if (!group || group.type !== "group") return;
+
+  activeGroupIndex = index;
+  groupTitleEl.textContent = group.title;
+  groupTilesEl.replaceChildren(
+    ...group.tiles.map((tile, groupIndex) => renderLinkTile(tile, null, true, groupIndex)),
+  );
+  groupDialogEl.showModal();
+}
+
+function renameGroup(group) {
+  const title = window.prompt("Название группы", group.title)?.trim();
+  if (!title) return;
+
+  group.title = title;
+  saveTiles();
+  renderTiles();
+}
+
+function getDropTarget(element) {
+  const targetEl = element.closest(".tile[data-index]");
+  if (!targetEl || draggedIndex === null) return null;
+
+  const targetIndex = Number(targetEl.dataset.index);
+  return targetIndex === draggedIndex ? null : targetEl;
+}
+
+function clearDropTarget() {
+  tilesEl.querySelector(".is-drop-target")?.classList.remove("is-drop-target");
+}
+
+function createOrExtendGroup(sourceIndex, targetIndex) {
+  const sourceTile = tiles[sourceIndex];
+  const targetTile = tiles[targetIndex];
+  if (!sourceTile || !targetTile || sourceTile.type === "group") return;
+
+  if (targetTile.type === "group") {
+    targetTile.tiles.push(sourceTile);
+    tiles.splice(sourceIndex, 1);
+  } else {
+    const title = window.prompt("Название группы", "Новая группа")?.trim();
+    if (!title) return;
+
+    const group = { type: "group", title, tiles: [targetTile, sourceTile] };
+    tiles.splice(sourceIndex, 1);
+    const adjustedTargetIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+    tiles[adjustedTargetIndex] = group;
+  }
+
+  saveTiles();
+  renderTiles();
+}
+
+function extractTileFromGroup(groupTileIndex) {
+  const group = tiles[activeGroupIndex];
+  if (!group || group.type !== "group" || !group.tiles[groupTileIndex]) return;
+
+  const [extractedTile] = group.tiles.splice(groupTileIndex, 1);
+  if (group.tiles.length === 1) {
+    const [remainingTile] = group.tiles;
+    tiles.splice(activeGroupIndex, 1, remainingTile, extractedTile);
+  } else {
+    tiles.splice(activeGroupIndex + 1, 0, extractedTile);
+  }
+
+  saveTiles();
+  renderTiles();
+  groupDialogEl.close();
 }
 
 function showMenu(x, y) {
@@ -274,38 +526,86 @@ async function readImageFromClipboard() {
 }
 
 async function handleDialogPaste(event) {
-  const item = readPastedData(event.clipboardData);
-  if (!item) return;
+  if (event.target.closest("input")) return;
+
+  const text = event.clipboardData.getData("text/plain").trim();
+  if (validPageUrl(text)) {
+    event.preventDefault();
+    urlInput.value = text;
+    urlInput.dispatchEvent(new Event("input", { bubbles: true }));
+    urlInput.focus();
+    return;
+  }
+
+  const imageFile = readPastedImage(event.clipboardData);
+  if (!imageFile) return;
 
   event.preventDefault();
-  await applyClipboardItem(item);
+  selectedImage = await readFileAsDataUrl(imageFile);
+  updateImagePreview(selectedImage);
 }
 
-function readPastedData(data) {
-  let imageFile = null;
+function queueTitleLookup() {
+  resetTitleLookup();
 
+  if (titleWasEnteredByUser) return;
+
+  const url = validPageUrl(urlInput.value.trim());
+  if (!url) return;
+
+  titleStatus.textContent = "Загрузка названия...";
+  titleRequestTimer = window.setTimeout(() => fetchPageTitle(url), 300);
+}
+
+async function fetchPageTitle(url) {
+  titleRequestController = new AbortController();
+
+  try {
+    const title = await window.AutoLinkTitle.fetchTitle(url, titleRequestController.signal);
+    if (titleWasEnteredByUser) return;
+
+    lastGeneratedTitle = title;
+    titleInput.value = title;
+    titleStatus.textContent = "Название подставлено";
+  } catch (error) {
+    if (error.name === "AbortError") return;
+
+    if (!titleWasEnteredByUser) {
+      const fallback = window.AutoLinkTitle.fallbackTitle(url);
+      lastGeneratedTitle = fallback;
+      titleInput.value = fallback;
+      titleStatus.textContent = error.message || "Не удалось загрузить название";
+      titleStatus.classList.add("is-error");
+      console.warn("Не удалось загрузить название плитки:", error);
+    }
+  }
+}
+
+function resetTitleLookup() {
+  window.clearTimeout(titleRequestTimer);
+  titleRequestController?.abort();
+  titleRequestController = null;
+  titleStatus.textContent = "";
+  titleStatus.classList.remove("is-error");
+}
+
+function validPageUrl(value) {
+  try {
+    const url = new URL(normalizeUrl(value));
+    return /^https?:$/.test(url.protocol) ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+function readPastedImage(data) {
   for (const item of data.items) {
     if (item.type.startsWith("image/")) {
-      imageFile = item.getAsFile();
+      return item.getAsFile();
     }
   }
 
-  if (imageFile) {
-    return { type: "image", file: imageFile };
-  }
-
-  const text = data.getData("text/plain").trim();
-  return text ? { type: "text", text } : null;
-}
-
-async function applyClipboardItem(item) {
-  if (item.type === "image") {
-    selectedImage = await readFileAsDataUrl(item.file);
-  } else {
-    selectedImage = item.text;
-  }
-
-  updateImagePreview(selectedImage);
+  return null;
 }
 
 function readFileAsDataUrl(file) {

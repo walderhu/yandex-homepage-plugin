@@ -38,6 +38,14 @@
       <button type="button" data-action="delete">Удалить</button>
     </div>
 
+    <dialog class="group-dialog" aria-labelledby="group-dialog-title">
+      <header class="group-header">
+        <h2 class="group-dialog-title" id="group-dialog-title"></h2>
+        <button class="group-close" type="button" aria-label="Закрыть">X</button>
+      </header>
+      <section class="group-tiles" aria-label="Ссылки в группе"></section>
+    </dialog>
+
     <dialog class="tile-dialog" aria-labelledby="tile-dialog-title">
       <form class="tile-form" method="dialog">
         <h2 id="tile-dialog-title">Добавить плитку</h2>
@@ -53,6 +61,7 @@
             <label>
               Название
               <input class="tile-title-input" type="text" autocomplete="off" required>
+              <span class="tile-title-status" aria-live="polite"></span>
             </label>
             <label>
               Ссылка
@@ -68,6 +77,7 @@
       </form>
     </dialog>
   </main>
+  <script src="auto-link-title.js"></script>
   <script src="script.js"></script>
 </body>
 
