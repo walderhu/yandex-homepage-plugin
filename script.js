@@ -22,6 +22,7 @@ const groupDialogEl = document.querySelector(".group-dialog");
 const groupTitleEl = document.querySelector(".group-dialog-title");
 const groupTilesEl = document.querySelector(".group-tiles");
 const groupCloseButton = document.querySelector(".group-close");
+const groupMenuEl = document.querySelector(".group-tile-menu");
 const dialogEl = document.querySelector(".tile-dialog");
 const formEl = document.querySelector(".tile-form");
 const dialogTitleEl = document.querySelector("#tile-dialog-title");
@@ -44,6 +45,9 @@ let lastGeneratedTitle = "";
 let draggedIndex = null;
 let activeGroupIndex = null;
 let draggedGroupTileIndex = null;
+let activeGroupTileIndex = null;
+let editingGroupIndex = null;
+let editingGroupTileIndex = null;
 
 renderTiles();
 
@@ -132,7 +136,9 @@ menuEl.addEventListener("click", (event) => {
 
   if (action === "edit") {
     if (tiles[tileIndex]?.type === "group") {
-      renameGroup(tiles[tileIndex]);
+      openGroupDialog(tileIndex);
+      groupTitleEl.focus();
+      groupTitleEl.select();
     } else {
       openTileDialog(tileIndex);
     }
@@ -154,6 +160,9 @@ document.addEventListener("click", (event) => {
   if (!menuEl.hidden && !event.target.closest(".tile-menu")) {
     hideMenu();
   }
+  if (isGroupMenuOpen() && !event.target.closest(".group-tile-menu")) {
+    hideGroupMenu();
+  }
 });
 
 document.addEventListener("keydown", (event) => {
@@ -165,13 +174,51 @@ document.addEventListener("keydown", (event) => {
 dialogEl.addEventListener("paste", handleDialogPaste);
 dialogEl.addEventListener("close", resetTitleLookup);
 groupCloseButton.addEventListener("click", () => groupDialogEl.close());
+groupTitleEl.addEventListener("change", saveGroupTitle);
+groupTitleEl.addEventListener("blur", saveGroupTitle);
+groupTitleEl.addEventListener("focus", () => groupTitleEl.select());
+groupTitleEl.addEventListener("click", () => groupTitleEl.select());
+groupTitleEl.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    groupTitleEl.blur();
+  }
+});
 groupDialogEl.addEventListener("click", (event) => {
   if (event.target === groupDialogEl) groupDialogEl.close();
 });
 groupDialogEl.addEventListener("close", () => {
+  hideGroupMenu();
   activeGroupIndex = null;
   draggedGroupTileIndex = null;
   groupDialogEl.classList.remove("is-extract-target");
+});
+
+groupTilesEl.addEventListener("contextmenu", (event) => {
+  const tileEl = event.target.closest(".tile[data-group-index]");
+  if (!tileEl) return;
+
+  event.preventDefault();
+  activeGroupTileIndex = Number(tileEl.dataset.groupIndex);
+  showGroupMenu(event.clientX, event.clientY);
+});
+
+groupMenuEl.addEventListener("click", (event) => {
+  const action = event.target.dataset.action;
+  if (!action || activeGroupTileIndex === null) return;
+
+  const groupIndex = activeGroupIndex;
+  const tileIndex = activeGroupTileIndex;
+  hideGroupMenu();
+
+  if (action === "edit") {
+    groupDialogEl.close();
+    openGroupTileDialog(groupIndex, tileIndex);
+  }
+
+  if (action === "delete") {
+    deleteTileFromGroup(groupIndex, tileIndex);
+  }
 });
 
 groupTilesEl.addEventListener("dragstart", (event) => {
@@ -182,6 +229,32 @@ groupTilesEl.addEventListener("dragstart", (event) => {
   tileEl.classList.add("is-dragging");
   event.dataTransfer.effectAllowed = "move";
   event.dataTransfer.setData("text/plain", String(draggedGroupTileIndex));
+});
+
+groupTilesEl.addEventListener("dragover", (event) => {
+  const targetEl = getGroupDropTarget(event.target);
+  if (!targetEl) return;
+
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "move";
+  clearGroupDropTarget();
+  targetEl.classList.add("is-drop-target");
+});
+
+groupTilesEl.addEventListener("dragleave", (event) => {
+  const tileEl = event.target.closest(".tile[data-group-index]");
+  if (tileEl && !tileEl.contains(event.relatedTarget)) {
+    tileEl.classList.remove("is-drop-target");
+  }
+});
+
+groupTilesEl.addEventListener("drop", (event) => {
+  const targetEl = getGroupDropTarget(event.target);
+  clearGroupDropTarget();
+  if (!targetEl) return;
+
+  event.preventDefault();
+  reorderGroupTiles(draggedGroupTileIndex, Number(targetEl.dataset.groupIndex));
 });
 
 groupDialogEl.addEventListener("dragover", (event) => {
@@ -207,6 +280,7 @@ groupDialogEl.addEventListener("drop", (event) => {
 
 groupTilesEl.addEventListener("dragend", () => {
   groupTilesEl.querySelector(".is-dragging")?.classList.remove("is-dragging");
+  clearGroupDropTarget();
   groupDialogEl.classList.remove("is-extract-target");
   draggedGroupTileIndex = null;
 });
@@ -255,7 +329,8 @@ imageInput.addEventListener("change", async () => {
 formEl.addEventListener("submit", async (event) => {
   event.preventDefault();
 
-  const isEditing = activeIndex !== null;
+  const isEditingGroupTile = editingGroupTileIndex !== null;
+  const isEditing = activeIndex !== null || isEditingGroupTile;
 
   const tile = {
     title: titleInput.value.trim(),
@@ -263,7 +338,9 @@ formEl.addEventListener("submit", async (event) => {
     image: selectedImage,
   };
 
-  if (isEditing) {
+  if (isEditingGroupTile) {
+    tiles[editingGroupIndex].tiles[editingGroupTileIndex] = tile;
+  } else if (isEditing) {
     tiles[activeIndex] = tile;
   } else {
     tiles.push(tile);
@@ -271,6 +348,8 @@ formEl.addEventListener("submit", async (event) => {
 
   saveTiles();
   renderTiles();
+  editingGroupIndex = null;
+  editingGroupTileIndex = null;
   dialogEl.close();
 });
 
@@ -370,6 +449,8 @@ function renderPlaceholderTile() {
 }
 
 function openTileDialog(index) {
+  editingGroupIndex = null;
+  editingGroupTileIndex = null;
   activeIndex = index;
   const tile = index === null ? {} : tiles[index] || {};
 
@@ -387,23 +468,44 @@ function openTileDialog(index) {
   (tile.url ? titleInput : urlInput).focus();
 }
 
+function openGroupTileDialog(groupIndex, groupTileIndex) {
+  const tile = tiles[groupIndex]?.tiles?.[groupTileIndex];
+  if (!tile) return;
+
+  activeIndex = null;
+  editingGroupIndex = groupIndex;
+  editingGroupTileIndex = groupTileIndex;
+  dialogTitleEl.textContent = "Изменить плитку";
+  titleInput.value = tile.title || "";
+  titleWasEnteredByUser = Boolean(tile.title);
+  lastGeneratedTitle = "";
+  resetTitleLookup();
+  urlInput.value = tile.url || "";
+  imageInput.value = "";
+  selectedImage = tile.image || "";
+  updateImagePreview(selectedImage || faviconUrl(tile.url || ""));
+  dialogEl.showModal();
+  titleInput.focus();
+}
+
 function openGroupDialog(index) {
   const group = tiles[index];
   if (!group || group.type !== "group") return;
 
   activeGroupIndex = index;
-  groupTitleEl.textContent = group.title;
+  groupTitleEl.value = group.title;
   groupTilesEl.replaceChildren(
     ...group.tiles.map((tile, groupIndex) => renderLinkTile(tile, null, true, groupIndex)),
   );
-  groupDialogEl.showModal();
+  if (!groupDialogEl.open) groupDialogEl.showModal();
 }
 
-function renameGroup(group) {
-  const title = window.prompt("Название группы", group.title)?.trim();
-  if (!title) return;
+function saveGroupTitle() {
+  const group = tiles[activeGroupIndex];
+  if (!group || group.type !== "group") return;
 
-  group.title = title;
+  group.title = groupTitleEl.value.trim() || "Новая группа";
+  groupTitleEl.value = group.title;
   saveTiles();
   renderTiles();
 }
@@ -420,6 +522,18 @@ function clearDropTarget() {
   tilesEl.querySelector(".is-drop-target")?.classList.remove("is-drop-target");
 }
 
+function getGroupDropTarget(element) {
+  const targetEl = element.closest(".tile[data-group-index]");
+  if (!targetEl || draggedGroupTileIndex === null) return null;
+
+  const targetIndex = Number(targetEl.dataset.groupIndex);
+  return targetIndex === draggedGroupTileIndex ? null : targetEl;
+}
+
+function clearGroupDropTarget() {
+  groupTilesEl.querySelector(".is-drop-target")?.classList.remove("is-drop-target");
+}
+
 function createOrExtendGroup(sourceIndex, targetIndex) {
   const sourceTile = tiles[sourceIndex];
   const targetTile = tiles[targetIndex];
@@ -429,10 +543,7 @@ function createOrExtendGroup(sourceIndex, targetIndex) {
     targetTile.tiles.push(sourceTile);
     tiles.splice(sourceIndex, 1);
   } else {
-    const title = window.prompt("Название группы", "Новая группа")?.trim();
-    if (!title) return;
-
-    const group = { type: "group", title, tiles: [targetTile, sourceTile] };
+    const group = { type: "group", title: "Новая группа", tiles: [targetTile, sourceTile] };
     tiles.splice(sourceIndex, 1);
     const adjustedTargetIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
     tiles[adjustedTargetIndex] = group;
@@ -440,6 +551,21 @@ function createOrExtendGroup(sourceIndex, targetIndex) {
 
   saveTiles();
   renderTiles();
+}
+
+function reorderGroupTiles(sourceIndex, targetIndex) {
+  const group = tiles[activeGroupIndex];
+  if (!group || group.type !== "group" || sourceIndex === targetIndex) return;
+
+  const sourceTile = group.tiles[sourceIndex];
+  const targetTile = group.tiles[targetIndex];
+  if (!sourceTile || !targetTile) return;
+
+  group.tiles[sourceIndex] = targetTile;
+  group.tiles[targetIndex] = sourceTile;
+  saveTiles();
+  renderTiles();
+  openGroupDialog(activeGroupIndex);
 }
 
 function extractTileFromGroup(groupTileIndex) {
@@ -459,6 +585,22 @@ function extractTileFromGroup(groupTileIndex) {
   groupDialogEl.close();
 }
 
+function deleteTileFromGroup(groupIndex, groupTileIndex) {
+  const group = tiles[groupIndex];
+  if (!group || group.type !== "group") return;
+
+  group.tiles.splice(groupTileIndex, 1);
+  if (group.tiles.length === 1) {
+    tiles.splice(groupIndex, 1, group.tiles[0]);
+    groupDialogEl.close();
+  } else {
+    openGroupDialog(groupIndex);
+  }
+
+  saveTiles();
+  renderTiles();
+}
+
 function showMenu(x, y) {
   menuEl.hidden = false;
   menuEl.style.left = `${x}px`;
@@ -468,6 +610,21 @@ function showMenu(x, y) {
 function hideMenu() {
   menuEl.hidden = true;
   activeIndex = null;
+}
+
+function showGroupMenu(x, y) {
+  groupMenuEl.style.left = `${x}px`;
+  groupMenuEl.style.top = `${y}px`;
+  groupMenuEl.showPopover();
+}
+
+function hideGroupMenu() {
+  if (isGroupMenuOpen()) groupMenuEl.hidePopover();
+  activeGroupTileIndex = null;
+}
+
+function isGroupMenuOpen() {
+  return groupMenuEl.matches(":popover-open");
 }
 
 function normalizeUrl(value) {
