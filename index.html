@@ -38,17 +38,16 @@
       <button type="button" data-action="delete">Удалить</button>
     </div>
 
-    <div class="group-tile-menu" popover="manual">
-      <button type="button" data-action="edit">Изменить</button>
-      <button type="button" data-action="delete">Удалить</button>
-    </div>
-
     <dialog class="group-dialog" aria-labelledby="group-dialog-title">
       <header class="group-header">
         <input class="group-dialog-title" id="group-dialog-title" type="text" aria-label="Название группы">
         <button class="group-close" type="button" aria-label="Закрыть">X</button>
       </header>
       <section class="group-tiles" aria-label="Ссылки в группе"></section>
+      <div class="group-tile-menu" popover="manual">
+        <button type="button" data-action="edit">Изменить</button>
+        <button type="button" data-action="delete">Удалить</button>
+      </div>
     </dialog>
 
     <dialog class="tile-dialog" aria-labelledby="tile-dialog-title">
