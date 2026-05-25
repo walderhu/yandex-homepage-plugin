@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Walderhu New Tab",
+  "description": "Custom Yandex-style new tab page with editable tiles.",
+  "version": "1.0.0",
+  "chrome_url_overrides": {
+    "newtab": "index.html"
+  },
+  "icons": {
+    "128": "assets/icon.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; img-src 'self' data: https://www.google.com;"
+  }
+}
