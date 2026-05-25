@@ -154,6 +154,7 @@ a {
 }
 
 .tile {
+  position: relative;
   width: 100%;
   height: 123px;
   padding: 23px 10px 11px;
@@ -164,6 +165,7 @@ a {
   background: #fafafa;
   color: var(--text);
   text-align: center;
+  transition: background 140ms ease, transform 140ms ease, box-shadow 140ms ease;
 }
 
 .tile:focus-visible,
@@ -184,10 +186,50 @@ a {
   opacity: 0.45;
 }
 
-.tile.is-drop-target {
+.tile.is-drop-target,
+.tile.is-group-target {
   background: #ffffff;
   outline: 3px solid rgba(255, 255, 255, 0.9);
   outline-offset: -3px;
+}
+
+.tile.is-group-target {
+  transform: scale(1.035);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.15);
+}
+
+.tile.is-group-target::after {
+  content: "В группу";
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  padding: 4px 9px;
+  border-radius: 10px;
+  background: rgba(34, 35, 38, 0.9);
+  color: #ffffff;
+  font-size: 12px;
+  line-height: 17px;
+  white-space: nowrap;
+}
+
+.tile.is-move-before-target::before,
+.tile.is-move-after-target::before {
+  content: "";
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  width: 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 1px 9px rgba(0, 0, 0, 0.3);
+}
+
+.tile.is-move-before-target::before {
+  left: -7px;
+}
+
+.tile.is-move-after-target::before {
+  right: -7px;
 }
 
 .icon {
@@ -255,10 +297,6 @@ a {
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-
-.group {
-  position: relative;
 }
 
 .group-photo {

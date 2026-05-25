@@ -72,7 +72,7 @@ tilesEl.addEventListener("click", (event) => {
 tilesEl.addEventListener("dragstart", (event) => {
   const tileEl = event.target.closest(".tile[data-index]");
   const index = Number(tileEl?.dataset.index);
-  if (!tileEl || tiles[index]?.type === "group") {
+  if (!tileEl || !tiles[index]) {
     event.preventDefault();
     return;
   }
@@ -84,29 +84,33 @@ tilesEl.addEventListener("dragstart", (event) => {
 });
 
 tilesEl.addEventListener("dragover", (event) => {
-  const targetEl = getDropTarget(event.target);
-  if (!targetEl) return;
+  const intent = getMainDropIntent(event);
+  if (!intent) return;
 
   event.preventDefault();
   event.dataTransfer.dropEffect = "move";
   clearDropTarget();
-  targetEl.classList.add("is-drop-target");
+  intent.targetEl.classList.add(`is-${intent.mode}-target`);
 });
 
 tilesEl.addEventListener("dragleave", (event) => {
   const tileEl = event.target.closest(".tile");
   if (tileEl && !tileEl.contains(event.relatedTarget)) {
-    tileEl.classList.remove("is-drop-target");
+    clearDropClasses(tileEl);
   }
 });
 
 tilesEl.addEventListener("drop", (event) => {
-  const targetEl = getDropTarget(event.target);
+  const intent = getMainDropIntent(event);
   clearDropTarget();
-  if (!targetEl) return;
+  if (!intent) return;
 
   event.preventDefault();
-  createOrExtendGroup(draggedIndex, Number(targetEl.dataset.index));
+  if (intent.mode === "group") {
+    createOrExtendGroup(draggedIndex, intent.targetIndex);
+  } else {
+    reorderTiles(draggedIndex, intent.targetIndex, intent.mode);
+  }
 });
 
 tilesEl.addEventListener("dragend", () => {
@@ -421,6 +425,7 @@ function renderGroupTile(group, index) {
   const button = document.createElement("button");
   button.className = "tile group";
   button.type = "button";
+  button.draggable = true;
   button.dataset.index = index;
 
   const icon = document.createElement("span");
@@ -510,16 +515,30 @@ function saveGroupTitle() {
   renderTiles();
 }
 
-function getDropTarget(element) {
-  const targetEl = element.closest(".tile[data-index]");
+function getMainDropIntent(event) {
+  const targetEl = event.target.closest(".tile[data-index]");
   if (!targetEl || draggedIndex === null) return null;
 
   const targetIndex = Number(targetEl.dataset.index);
-  return targetIndex === draggedIndex ? null : targetEl;
+  if (targetIndex === draggedIndex) return null;
+
+  const bounds = targetEl.getBoundingClientRect();
+  const x = (event.clientX - bounds.left) / bounds.width;
+  const sourceCanJoinGroup = tiles[draggedIndex]?.type !== "group";
+  const mode = sourceCanJoinGroup && x > 0.27 && x < 0.73
+    ? "group"
+    : x < 0.5 ? "move-before" : "move-after";
+
+  return { targetEl, targetIndex, mode };
 }
 
 function clearDropTarget() {
-  tilesEl.querySelector(".is-drop-target")?.classList.remove("is-drop-target");
+  tilesEl.querySelectorAll(".is-group-target, .is-move-before-target, .is-move-after-target")
+    .forEach(clearDropClasses);
+}
+
+function clearDropClasses(tileEl) {
+  tileEl.classList.remove("is-group-target", "is-move-before-target", "is-move-after-target");
 }
 
 function getGroupDropTarget(element) {
@@ -549,6 +568,17 @@ function createOrExtendGroup(sourceIndex, targetIndex) {
     tiles[adjustedTargetIndex] = group;
   }
 
+  saveTiles();
+  renderTiles();
+}
+
+function reorderTiles(sourceIndex, targetIndex, mode) {
+  const [tile] = tiles.splice(sourceIndex, 1);
+  if (!tile) return;
+
+  let insertAt = targetIndex - (sourceIndex < targetIndex ? 1 : 0);
+  if (mode === "move-after") insertAt += 1;
+  tiles.splice(insertAt, 0, tile);
   saveTiles();
   renderTiles();
 }
