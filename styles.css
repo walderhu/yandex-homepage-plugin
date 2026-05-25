@@ -237,11 +237,41 @@ a {
 }
 
 .placeholder {
+  position: relative;
   background: var(--tile-empty);
+}
+
+.placeholder::before,
+.placeholder::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 34px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.78);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.placeholder::after {
+  transform: translate(-50%, -50%) rotate(90deg) scale(0.78);
 }
 
 .placeholder:hover {
   background: #99999d;
+}
+
+.placeholder:hover::before {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.placeholder:hover::after {
+  opacity: 1;
+  transform: translate(-50%, -50%) rotate(90deg) scale(1);
 }
 
 .tile-menu {
@@ -270,12 +300,12 @@ a {
 }
 
 .tile-dialog {
-  width: min(430px, calc(100vw - 32px));
+  width: min(360px, calc(100vw - 32px));
   padding: 0;
   border: 0;
-  border-radius: 28px;
-  background: #ffffff;
-  color: #252629;
+  border-radius: 20px;
+  background: #181818;
+  color: #f2f2f2;
   box-shadow: 0 22px 80px rgba(0, 0, 0, 0.36);
 }
 
@@ -285,63 +315,112 @@ a {
 
 .tile-form {
   display: grid;
-  gap: 16px;
-  padding: 28px;
+  gap: 12px;
+  padding: 18px;
 }
 
 .tile-form h2 {
-  margin: 0 0 4px;
-  font-size: 24px;
+  margin: 0 0 2px;
+  font-size: 18px;
   line-height: 1.2;
 }
 
 .tile-form label {
   display: grid;
-  gap: 8px;
-  color: #5f6166;
-  font-size: 15px;
+  gap: 6px;
+  color: #a7a7a7;
+  font-size: 13px;
 }
 
 .tile-form input {
   width: 100%;
-  height: 46px;
-  padding: 0 14px;
-  border: 1px solid #d9dadd;
-  border-radius: 14px;
-  color: #252629;
-  background: #f7f7f8;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid #333333;
+  border-radius: 10px;
+  color: #f2f2f2;
+  background: #1f1f1f;
+  outline: none;
 }
 
-.tile-form input[type="file"] {
-  height: auto;
-  padding: 12px 14px;
+.tile-form input:focus {
+  border-color: #666666;
+  background: #242424;
 }
 
-.tile-image-hint {
-  margin: -6px 0 0;
-  color: #85868a;
+.tile-image-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.tile-image-preview {
+  min-height: 82px;
+  border: 1px dashed #3d3d3d;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #1f1f1f;
+}
+
+.tile-image-preview img {
+  display: block;
+  width: 100%;
+  max-height: 120px;
+  object-fit: contain;
+}
+
+.tile-preview-fallback {
+  color: #b7b7b7;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.tile-image-tools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.tile-image-tools button {
+  height: 36px;
+  border-radius: 10px;
+  color: #f2f2f2;
+  background: #1f1f1f;
+  border: 1px solid #333333;
   font-size: 13px;
 }
 
+.tile-image-tools button:hover {
+  border-color: #666666;
+  background: #242424;
+}
+
+.tile-image-hint {
+  margin: -2px 0 0;
+  color: #85868a;
+  font-size: 12px;
+}
+
 .tile-form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 4px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 2px;
 }
 
 .tile-form-actions button {
-  min-width: 110px;
-  height: 44px;
-  border-radius: 14px;
-  color: #252629;
-  background: #eeeef0;
+  width: 100%;
+  height: 40px;
+  border-radius: 10px;
+  color: #f2f2f2;
+  background: #2a2a2a;
   font-weight: 700;
 }
 
 .tile-form-actions .tile-save {
-  color: #ffffff;
-  background: #252629;
+  color: #181818;
+  background: #f2f2f2;
 }
 
 .controls {

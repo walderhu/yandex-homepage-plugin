@@ -1,5 +1,4 @@
 const TILE_STORAGE_KEY = "homepage.tiles.v1";
-const TILE_COUNT = 4;
 
 const defaultTiles = [
   {
@@ -14,7 +13,6 @@ const defaultTiles = [
     title: "Extensions",
     url: "browser://extensions/",
   },
-  null,
 ];
 
 const tilesEl = document.querySelector(".tiles");
@@ -25,10 +23,16 @@ const dialogTitleEl = document.querySelector("#tile-dialog-title");
 const titleInput = document.querySelector(".tile-title-input");
 const urlInput = document.querySelector(".tile-url-input");
 const imageInput = document.querySelector(".tile-image-input");
+const previewImg = document.querySelector(".tile-preview-img");
+const previewFallback = document.querySelector(".tile-preview-fallback");
+const pasteToggle = document.querySelector(".tile-paste-toggle");
+const pasteInput = document.querySelector(".tile-paste-input");
+const fileButton = document.querySelector(".tile-file-button");
 const cancelButton = document.querySelector(".tile-cancel");
 
 let tiles = loadTiles();
 let activeIndex = null;
+let selectedImage = "";
 
 renderTiles();
 
@@ -36,12 +40,9 @@ tilesEl.addEventListener("click", (event) => {
   const tileEl = event.target.closest(".tile");
   if (!tileEl) return;
 
-  const index = Number(tileEl.dataset.index);
-  const tile = tiles[index];
-
-  if (!tile) {
+  if (tileEl.classList.contains("placeholder")) {
     event.preventDefault();
-    openTileDialog(index);
+    openTileDialog(null);
   }
 });
 
@@ -50,7 +51,7 @@ tilesEl.addEventListener("contextmenu", (event) => {
   if (!tileEl) return;
 
   const index = Number(tileEl.dataset.index);
-  if (!tiles[index]) return;
+  if (tileEl.classList.contains("placeholder") || !tiles[index]) return;
 
   event.preventDefault();
   activeIndex = index;
@@ -69,7 +70,7 @@ menuEl.addEventListener("click", (event) => {
   }
 
   if (action === "delete") {
-    tiles[tileIndex] = null;
+    tiles.splice(tileIndex, 1);
     saveTiles();
     renderTiles();
   }
@@ -91,21 +92,66 @@ cancelButton.addEventListener("click", () => {
   dialogEl.close();
 });
 
+urlInput.addEventListener("input", () => {
+  if (!selectedImage) {
+    updateImagePreview(faviconUrl(normalizeUrl(urlInput.value.trim())));
+  }
+});
+
+pasteToggle.addEventListener("click", () => {
+  pasteInput.hidden = false;
+  pasteInput.focus();
+});
+
+pasteInput.addEventListener("input", () => {
+  const value = pasteInput.value.trim();
+  if (!value) return;
+
+  selectedImage = value;
+  updateImagePreview(selectedImage);
+});
+
+pasteInput.addEventListener("paste", async (event) => {
+  const file = findPastedImage(event.clipboardData);
+  if (!file) return;
+
+  event.preventDefault();
+  selectedImage = await readFileAsDataUrl(file);
+  pasteInput.value = "";
+  pasteInput.hidden = true;
+  updateImagePreview(selectedImage);
+});
+
+fileButton.addEventListener("click", () => {
+  imageInput.click();
+});
+
+imageInput.addEventListener("change", async () => {
+  const file = imageInput.files?.[0];
+  if (!file || !file.type.startsWith("image/")) return;
+
+  selectedImage = await readFileAsDataUrl(file);
+  pasteInput.value = "";
+  pasteInput.hidden = true;
+  updateImagePreview(selectedImage);
+});
+
 formEl.addEventListener("submit", async (event) => {
   event.preventDefault();
 
-  if (activeIndex === null) return;
+  const isEditing = activeIndex !== null;
 
-  const existingTile = tiles[activeIndex] || {};
-  const image = imageInput.files[0]
-    ? await readFileAsDataUrl(imageInput.files[0])
-    : existingTile.image || "";
-
-  tiles[activeIndex] = {
+  const tile = {
     title: titleInput.value.trim(),
     url: normalizeUrl(urlInput.value.trim()),
-    image,
+    image: selectedImage,
   };
+
+  if (isEditing) {
+    tiles[activeIndex] = tile;
+  } else {
+    tiles.push(tile);
+  }
 
   saveTiles();
   renderTiles();
@@ -116,7 +162,7 @@ function loadTiles() {
   try {
     const savedTiles = JSON.parse(localStorage.getItem(TILE_STORAGE_KEY));
     if (Array.isArray(savedTiles)) {
-      return [...savedTiles, ...Array(TILE_COUNT).fill(null)].slice(0, TILE_COUNT);
+      return savedTiles.filter(Boolean);
     }
   } catch {
     localStorage.removeItem(TILE_STORAGE_KEY);
@@ -126,23 +172,16 @@ function loadTiles() {
 }
 
 function saveTiles() {
-  localStorage.setItem(TILE_STORAGE_KEY, JSON.stringify(tiles));
+  localStorage.setItem(TILE_STORAGE_KEY, JSON.stringify(tiles.filter(Boolean)));
 }
 
 function renderTiles() {
-  tilesEl.replaceChildren(...tiles.map(renderTile));
+  const renderedTiles = tiles.map(renderTile);
+  renderedTiles.push(renderPlaceholderTile());
+  tilesEl.replaceChildren(...renderedTiles);
 }
 
 function renderTile(tile, index) {
-  if (!tile) {
-    const button = document.createElement("button");
-    button.className = "tile placeholder";
-    button.type = "button";
-    button.dataset.index = index;
-    button.setAttribute("aria-label", "Добавить плитку");
-    return button;
-  }
-
   const link = document.createElement("a");
   link.className = "tile";
   link.href = tile.url;
@@ -170,14 +209,26 @@ function renderTile(tile, index) {
   return link;
 }
 
+function renderPlaceholderTile() {
+  const button = document.createElement("button");
+  button.className = "tile placeholder";
+  button.type = "button";
+  button.setAttribute("aria-label", "Добавить плитку");
+  return button;
+}
+
 function openTileDialog(index) {
   activeIndex = index;
-  const tile = tiles[index] || {};
+  const tile = index === null ? {} : tiles[index] || {};
 
   dialogTitleEl.textContent = tile.url ? "Изменить плитку" : "Добавить плитку";
   titleInput.value = tile.title || "";
   urlInput.value = tile.url || "";
   imageInput.value = "";
+  pasteInput.value = "";
+  pasteInput.hidden = true;
+  selectedImage = tile.image || "";
+  updateImagePreview(selectedImage || faviconUrl(tile.url || ""));
 
   dialogEl.showModal();
   titleInput.focus();
@@ -210,6 +261,29 @@ function faviconUrl(value) {
   } catch {
     return "";
   }
+}
+
+function updateImagePreview(src) {
+  if (src) {
+    previewImg.src = src;
+    previewImg.hidden = false;
+    previewFallback.hidden = true;
+    return;
+  }
+
+  previewImg.removeAttribute("src");
+  previewImg.hidden = true;
+  previewFallback.hidden = false;
+}
+
+function findPastedImage(data) {
+  for (const item of data.items) {
+    if (item.type.startsWith("image/")) {
+      return item.getAsFile();
+    }
+  }
+
+  return null;
 }
 
 function readFileAsDataUrl(file) {
