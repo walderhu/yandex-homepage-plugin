@@ -44,6 +44,15 @@ a {
   height: 100%;
 }
 
+.new-tab.is-group-open::before {
+  content: "";
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.36);
+}
+
 .center {
   position: absolute;
   top: calc(50% - 205px);
@@ -404,7 +413,11 @@ a {
 }
 
 .group-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
   width: min(610px, calc(100vw - 32px));
+  height: max-content;
   max-height: min(570px, calc(100vh - 32px));
   padding: 0;
   border: 0;
@@ -413,6 +426,7 @@ a {
   backdrop-filter: blur(16px);
   color: #f2f2f2;
   box-shadow: 0 22px 80px rgba(0, 0, 0, 0.36);
+  z-index: 100;
   transition: outline-color 140ms ease;
 }
 
@@ -463,9 +477,9 @@ a {
   background: rgba(255, 255, 255, 0.1);
 }
 
+.group-back,
 .group-close {
   position: absolute;
-  right: 14px;
   flex: none;
   width: 34px;
   height: 34px;
@@ -475,6 +489,16 @@ a {
   font-size: 18px;
 }
 
+.group-back {
+  left: 14px;
+  padding-bottom: 3px;
+}
+
+.group-close {
+  right: 14px;
+}
+
+.group-back:hover,
 .group-close:hover {
   color: #ffffff;
   background: #292929;
@@ -504,6 +528,16 @@ a {
   height: 31px;
   margin-bottom: 3px;
   border-radius: 10px;
+}
+
+.group-tiles .group-photo {
+  width: 36px;
+  height: 36px;
+  margin-top: -3px;
+  margin-bottom: 2px;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 11px;
 }
 
 .group-tiles .caption {
@@ -609,13 +643,19 @@ a {
 }
 
 .tile-image-preview img.is-placeholder {
-  width: 94%;
-  height: 94%;
+  width: 104%;
+  height: 104%;
+  top: calc(50% + 4px);
 }
 
 .tile-image-preview:hover img,
 .tile-image-preview:focus-within img {
   filter: blur(4px) brightness(60%);
+  transform: translate(-50%, -50%) scale(1.04);
+}
+
+.tile-image-preview:hover img.is-placeholder,
+.tile-image-preview:focus-within img.is-placeholder {
   transform: translate(-50%, -50%) scale(1.04);
 }
 

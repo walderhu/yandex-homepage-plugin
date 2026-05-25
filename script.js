@@ -1,5 +1,6 @@
 const TILE_STORAGE_KEY = "homepage.tiles.v1";
 const DEFAULT_PLACEHOLDER_IMAGE = "assets/icon.png";
+const NESTED_GROUP_TEST_ID = "nested-groups-v1";
 
 const defaultTiles = [
   {
@@ -17,10 +18,12 @@ const defaultTiles = [
 ];
 
 const tilesEl = document.querySelector(".tiles");
+const pageEl = document.querySelector(".new-tab");
 const menuEl = document.querySelector(".tile-menu");
 const groupDialogEl = document.querySelector(".group-dialog");
 const groupTitleEl = document.querySelector(".group-dialog-title");
 const groupTilesEl = document.querySelector(".group-tiles");
+const groupBackButton = document.querySelector(".group-back");
 const groupCloseButton = document.querySelector(".group-close");
 const groupMenuEl = document.querySelector(".group-tile-menu");
 const dialogEl = document.querySelector(".tile-dialog");
@@ -43,10 +46,10 @@ let titleRequestTimer = null;
 let titleWasEnteredByUser = false;
 let lastGeneratedTitle = "";
 let draggedIndex = null;
-let activeGroupIndex = null;
+let activeGroupPath = [];
 let draggedGroupTileIndex = null;
 let activeGroupTileIndex = null;
-let editingGroupIndex = null;
+let editingGroupPath = null;
 let editingGroupTileIndex = null;
 
 renderTiles();
@@ -65,7 +68,7 @@ tilesEl.addEventListener("click", (event) => {
   const tile = tiles[index];
   if (tile?.type === "group") {
     event.preventDefault();
-    openGroupDialog(index);
+    openGroupDialog([index]);
   }
 });
 
@@ -107,9 +110,17 @@ tilesEl.addEventListener("drop", (event) => {
 
   event.preventDefault();
   if (intent.mode === "group") {
-    createOrExtendGroup(draggedIndex, intent.targetIndex);
+    if (draggedGroupTileIndex !== null) {
+      moveGroupTileToMain(draggedGroupTileIndex, intent);
+    } else {
+      createOrExtendGroup(draggedIndex, intent.targetIndex);
+    }
   } else {
-    reorderTiles(draggedIndex, intent.targetIndex, intent.mode);
+    if (draggedGroupTileIndex !== null) {
+      moveGroupTileToMain(draggedGroupTileIndex, intent);
+    } else {
+      reorderTiles(draggedIndex, intent.targetIndex, intent.mode);
+    }
   }
 });
 
@@ -140,7 +151,7 @@ menuEl.addEventListener("click", (event) => {
 
   if (action === "edit") {
     if (tiles[tileIndex]?.type === "group") {
-      openGroupDialog(tileIndex);
+      openGroupDialog([tileIndex]);
       groupTitleEl.focus();
       groupTitleEl.select();
     } else {
@@ -167,6 +178,11 @@ document.addEventListener("click", (event) => {
   if (isGroupMenuOpen() && !event.target.closest(".group-tile-menu")) {
     hideGroupMenu();
   }
+  if (groupDialogEl.open
+    && !event.target.closest(".group-dialog")
+    && !event.target.closest(".group")) {
+    groupDialogEl.close();
+  }
 });
 
 document.addEventListener("keydown", (event) => {
@@ -177,6 +193,11 @@ document.addEventListener("keydown", (event) => {
 
 dialogEl.addEventListener("paste", handleDialogPaste);
 dialogEl.addEventListener("close", resetTitleLookup);
+groupBackButton.addEventListener("click", () => {
+  if (activeGroupPath.length > 1) {
+    openGroupDialog(activeGroupPath.slice(0, -1));
+  }
+});
 groupCloseButton.addEventListener("click", () => groupDialogEl.close());
 groupTitleEl.addEventListener("change", saveGroupTitle);
 groupTitleEl.addEventListener("blur", saveGroupTitle);
@@ -193,9 +214,20 @@ groupDialogEl.addEventListener("click", (event) => {
 });
 groupDialogEl.addEventListener("close", () => {
   hideGroupMenu();
-  activeGroupIndex = null;
+  pageEl.classList.remove("is-group-open");
+  activeGroupPath = [];
   draggedGroupTileIndex = null;
   groupDialogEl.classList.remove("is-extract-target");
+});
+
+groupTilesEl.addEventListener("click", (event) => {
+  const tileEl = event.target.closest(".tile[data-group-index]");
+  const groupTileIndex = Number(tileEl?.dataset.groupIndex);
+  const tile = getActiveGroup()?.tiles[groupTileIndex];
+  if (!tileEl || tile?.type !== "group") return;
+
+  event.preventDefault();
+  openGroupDialog([...activeGroupPath, groupTileIndex]);
 });
 
 groupTilesEl.addEventListener("contextmenu", (event) => {
@@ -211,17 +243,23 @@ groupMenuEl.addEventListener("click", (event) => {
   const action = event.target.dataset.action;
   if (!action || activeGroupTileIndex === null) return;
 
-  const groupIndex = activeGroupIndex;
+  const groupPath = [...activeGroupPath];
   const tileIndex = activeGroupTileIndex;
   hideGroupMenu();
 
   if (action === "edit") {
-    groupDialogEl.close();
-    openGroupTileDialog(groupIndex, tileIndex);
+    if (getGroupAtPath(groupPath)?.tiles[tileIndex]?.type === "group") {
+      openGroupDialog([...groupPath, tileIndex]);
+      groupTitleEl.focus();
+      groupTitleEl.select();
+    } else {
+      groupDialogEl.close();
+      openGroupTileDialog(groupPath, tileIndex);
+    }
   }
 
   if (action === "delete") {
-    deleteTileFromGroup(groupIndex, tileIndex);
+    deleteTileFromGroup(groupPath, tileIndex);
   }
 });
 
@@ -236,47 +274,71 @@ groupTilesEl.addEventListener("dragstart", (event) => {
 });
 
 groupTilesEl.addEventListener("dragover", (event) => {
-  const targetEl = getGroupDropTarget(event.target);
-  if (!targetEl) return;
+  const intent = getGroupDropIntent(event);
+  if (!intent) return;
 
   event.preventDefault();
   event.dataTransfer.dropEffect = "move";
   clearGroupDropTarget();
-  targetEl.classList.add("is-drop-target");
+  intent.targetEl.classList.add(`is-${intent.mode}-target`);
 });
 
 groupTilesEl.addEventListener("dragleave", (event) => {
   const tileEl = event.target.closest(".tile[data-group-index]");
   if (tileEl && !tileEl.contains(event.relatedTarget)) {
-    tileEl.classList.remove("is-drop-target");
+    clearDropClasses(tileEl);
   }
 });
 
 groupTilesEl.addEventListener("drop", (event) => {
-  const targetEl = getGroupDropTarget(event.target);
+  const intent = getGroupDropIntent(event);
   clearGroupDropTarget();
-  if (!targetEl) return;
+  if (!intent) return;
 
   event.preventDefault();
-  reorderGroupTiles(draggedGroupTileIndex, Number(targetEl.dataset.groupIndex));
+  if (intent.mode === "group") {
+    createOrExtendActiveGroup(draggedGroupTileIndex, intent.targetIndex);
+  } else {
+    reorderGroupTiles(draggedGroupTileIndex, intent.targetIndex, intent.mode);
+  }
 });
 
 groupDialogEl.addEventListener("dragover", (event) => {
-  if (draggedGroupTileIndex === null || event.target.closest(".group-tiles")) return;
+  if (draggedGroupTileIndex === null) return;
+
+  groupDialogEl.classList.remove("is-extract-target");
+  if (!event.target.closest(".tile[data-group-index]")) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "none";
+  }
+});
+
+groupDialogEl.addEventListener("drop", (event) => {
+  if (draggedGroupTileIndex === null) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+});
+
+pageEl.addEventListener("dragover", (event) => {
+  if (draggedGroupTileIndex === null
+    || event.target.closest(".group-dialog")
+    || !hasLeftGroupDialog(event)) {
+    return;
+  }
 
   event.preventDefault();
   event.dataTransfer.dropEffect = "move";
   groupDialogEl.classList.add("is-extract-target");
 });
 
-groupDialogEl.addEventListener("dragleave", (event) => {
-  if (!groupDialogEl.contains(event.relatedTarget)) {
-    groupDialogEl.classList.remove("is-extract-target");
+pageEl.addEventListener("drop", (event) => {
+  if (draggedGroupTileIndex === null
+    || event.target.closest(".group-dialog")
+    || !hasLeftGroupDialog(event)
+    || (activeGroupPath.length === 1 && event.target.closest(".tile[data-index]"))) {
+    return;
   }
-});
-
-groupDialogEl.addEventListener("drop", (event) => {
-  if (draggedGroupTileIndex === null || event.target.closest(".group-tiles")) return;
 
   event.preventDefault();
   extractTileFromGroup(draggedGroupTileIndex);
@@ -343,7 +405,7 @@ formEl.addEventListener("submit", async (event) => {
   };
 
   if (isEditingGroupTile) {
-    tiles[editingGroupIndex].tiles[editingGroupTileIndex] = tile;
+    getGroupAtPath(editingGroupPath).tiles[editingGroupTileIndex] = tile;
   } else if (isEditing) {
     tiles[activeIndex] = tile;
   } else {
@@ -352,7 +414,7 @@ formEl.addEventListener("submit", async (event) => {
 
   saveTiles();
   renderTiles();
-  editingGroupIndex = null;
+  editingGroupPath = null;
   editingGroupTileIndex = null;
   dialogEl.close();
 });
@@ -362,20 +424,62 @@ function loadTiles() {
     const savedTiles = JSON.parse(localStorage.getItem(TILE_STORAGE_KEY));
     if (Array.isArray(savedTiles)) {
       const cleanTiles = savedTiles.filter((tile) => tile && !isTestTile(tile));
-      if (cleanTiles.length !== savedTiles.length) {
-        localStorage.setItem(TILE_STORAGE_KEY, JSON.stringify(cleanTiles));
+      if (!hasNestedTestGroup(cleanTiles)) {
+        cleanTiles.push(createNestedTestGroup());
       }
+      localStorage.setItem(TILE_STORAGE_KEY, JSON.stringify(cleanTiles));
       return cleanTiles;
     }
   } catch {
     localStorage.removeItem(TILE_STORAGE_KEY);
   }
 
-  return defaultTiles;
+  return [...defaultTiles, createNestedTestGroup()];
 }
 
 function isTestTile(tile) {
   return tile.url?.startsWith("https://example.com/?test-tile=");
+}
+
+function hasNestedTestGroup(items) {
+  return items.some((tile) => tile.testFixture === NESTED_GROUP_TEST_ID
+    || (tile.type === "group" && hasNestedTestGroup(tile.tiles)));
+}
+
+function createNestedTestGroup() {
+  return {
+    type: "group",
+    testFixture: NESTED_GROUP_TEST_ID,
+    title: "Тест: уровень 1",
+    tiles: [
+      { title: "На первом", url: "https://ya.ru/" },
+      {
+        type: "group",
+        testFixture: NESTED_GROUP_TEST_ID,
+        title: "Тест: уровень 2",
+        tiles: [
+          { title: "На втором", url: "https://habr.com/" },
+          {
+            type: "group",
+            testFixture: NESTED_GROUP_TEST_ID,
+            title: "Тест: уровень 3",
+            tiles: [
+              { title: "На третьем", url: "https://youtube.com/" },
+              {
+                type: "group",
+                testFixture: NESTED_GROUP_TEST_ID,
+                title: "Тест: уровень 4",
+                tiles: [
+                  { title: "Глубина A", url: "https://github.com/" },
+                  { title: "Глубина B", url: "https://developer.mozilla.org/" },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
 }
 
 function saveTiles() {
@@ -421,18 +525,19 @@ function renderLinkTile(tile, index, draggable, groupIndex = null) {
   return link;
 }
 
-function renderGroupTile(group, index) {
+function renderGroupTile(group, index, groupIndex = null) {
   const button = document.createElement("button");
   button.className = "tile group";
   button.type = "button";
   button.draggable = true;
-  button.dataset.index = index;
+  if (index !== null) button.dataset.index = index;
+  if (groupIndex !== null) button.dataset.groupIndex = groupIndex;
 
   const icon = document.createElement("span");
   icon.className = "icon group-photo";
   group.tiles.slice(0, 4).forEach((tile) => {
     const img = document.createElement("img");
-    img.src = tile.image || faviconUrl(tile.url) || DEFAULT_PLACEHOLDER_IMAGE;
+    img.src = getTilePreviewImage(tile);
     img.alt = "";
     icon.append(img);
   });
@@ -445,6 +550,22 @@ function renderGroupTile(group, index) {
   return button;
 }
 
+function renderGroupChildTile(tile, groupIndex) {
+  if (tile.type === "group") {
+    return renderGroupTile(tile, null, groupIndex);
+  }
+
+  return renderLinkTile(tile, null, true, groupIndex);
+}
+
+function getTilePreviewImage(tile) {
+  if (tile.type === "group") {
+    return getTilePreviewImage(tile.tiles[0] || {});
+  }
+
+  return tile.image || faviconUrl(tile.url) || DEFAULT_PLACEHOLDER_IMAGE;
+}
+
 function renderPlaceholderTile() {
   const button = document.createElement("button");
   button.className = "tile placeholder";
@@ -454,7 +575,7 @@ function renderPlaceholderTile() {
 }
 
 function openTileDialog(index) {
-  editingGroupIndex = null;
+  editingGroupPath = null;
   editingGroupTileIndex = null;
   activeIndex = index;
   const tile = index === null ? {} : tiles[index] || {};
@@ -473,12 +594,12 @@ function openTileDialog(index) {
   (tile.url ? titleInput : urlInput).focus();
 }
 
-function openGroupTileDialog(groupIndex, groupTileIndex) {
-  const tile = tiles[groupIndex]?.tiles?.[groupTileIndex];
+function openGroupTileDialog(groupPath, groupTileIndex) {
+  const tile = getGroupAtPath(groupPath)?.tiles?.[groupTileIndex];
   if (!tile) return;
 
   activeIndex = null;
-  editingGroupIndex = groupIndex;
+  editingGroupPath = [...groupPath];
   editingGroupTileIndex = groupTileIndex;
   dialogTitleEl.textContent = "Изменить плитку";
   titleInput.value = tile.title || "";
@@ -493,20 +614,22 @@ function openGroupTileDialog(groupIndex, groupTileIndex) {
   titleInput.focus();
 }
 
-function openGroupDialog(index) {
-  const group = tiles[index];
+function openGroupDialog(path) {
+  const group = getGroupAtPath(path);
   if (!group || group.type !== "group") return;
 
-  activeGroupIndex = index;
+  activeGroupPath = [...path];
+  groupBackButton.hidden = path.length === 1;
   groupTitleEl.value = group.title;
   groupTilesEl.replaceChildren(
-    ...group.tiles.map((tile, groupIndex) => renderLinkTile(tile, null, true, groupIndex)),
+    ...group.tiles.map(renderGroupChildTile),
   );
-  if (!groupDialogEl.open) groupDialogEl.showModal();
+  pageEl.classList.add("is-group-open");
+  if (!groupDialogEl.open) groupDialogEl.show();
 }
 
 function saveGroupTitle() {
-  const group = tiles[activeGroupIndex];
+  const group = getActiveGroup();
   if (!group || group.type !== "group") return;
 
   group.title = groupTitleEl.value.trim() || "Новая группа";
@@ -515,21 +638,55 @@ function saveGroupTitle() {
   renderTiles();
 }
 
+function getActiveGroup() {
+  return getGroupAtPath(activeGroupPath);
+}
+
+function getGroupAtPath(path) {
+  let group = tiles[path?.[0]];
+  for (const index of path?.slice(1) || []) {
+    group = group?.tiles?.[index];
+  }
+
+  return group?.type === "group" ? group : null;
+}
+
+function getParentTiles(path) {
+  if (!path?.length) return null;
+  if (path.length === 1) return tiles;
+  return getGroupAtPath(path.slice(0, -1))?.tiles || null;
+}
+
 function getMainDropIntent(event) {
   const targetEl = event.target.closest(".tile[data-index]");
-  if (!targetEl || draggedIndex === null) return null;
+  if (!targetEl || (draggedIndex === null && draggedGroupTileIndex === null)) return null;
+  if (draggedGroupTileIndex !== null
+    && (activeGroupPath.length !== 1 || !hasLeftGroupDialog(event))) {
+    return null;
+  }
 
   const targetIndex = Number(targetEl.dataset.index);
-  if (targetIndex === draggedIndex) return null;
+  if (targetIndex === draggedIndex
+    || (draggedGroupTileIndex !== null && targetIndex === activeGroupPath[0])) {
+    return null;
+  }
 
   const bounds = targetEl.getBoundingClientRect();
   const x = (event.clientX - bounds.left) / bounds.width;
-  const sourceCanJoinGroup = tiles[draggedIndex]?.type !== "group";
-  const mode = sourceCanJoinGroup && x > 0.27 && x < 0.73
+  const mode = x > 0.27 && x < 0.73
     ? "group"
     : x < 0.5 ? "move-before" : "move-after";
 
   return { targetEl, targetIndex, mode };
+}
+
+function hasLeftGroupDialog(event) {
+  const bounds = groupDialogEl.getBoundingClientRect();
+  const margin = 12;
+  return event.clientX < bounds.left - margin
+    || event.clientX > bounds.right + margin
+    || event.clientY < bounds.top - margin
+    || event.clientY > bounds.bottom + margin;
 }
 
 function clearDropTarget() {
@@ -541,35 +698,70 @@ function clearDropClasses(tileEl) {
   tileEl.classList.remove("is-group-target", "is-move-before-target", "is-move-after-target");
 }
 
-function getGroupDropTarget(element) {
-  const targetEl = element.closest(".tile[data-group-index]");
+function getGroupDropIntent(event) {
+  const targetEl = event.target.closest(".tile[data-group-index]");
   if (!targetEl || draggedGroupTileIndex === null) return null;
 
   const targetIndex = Number(targetEl.dataset.groupIndex);
-  return targetIndex === draggedGroupTileIndex ? null : targetEl;
+  if (targetIndex === draggedGroupTileIndex) return null;
+
+  const bounds = targetEl.getBoundingClientRect();
+  const x = (event.clientX - bounds.left) / bounds.width;
+  const mode = x > 0.27 && x < 0.73
+    ? "group"
+    : x < 0.5 ? "move-before" : "move-after";
+  return { targetEl, targetIndex, mode };
 }
 
 function clearGroupDropTarget() {
-  groupTilesEl.querySelector(".is-drop-target")?.classList.remove("is-drop-target");
+  groupTilesEl.querySelectorAll(".is-group-target, .is-move-before-target, .is-move-after-target")
+    .forEach(clearDropClasses);
 }
 
 function createOrExtendGroup(sourceIndex, targetIndex) {
-  const sourceTile = tiles[sourceIndex];
-  const targetTile = tiles[targetIndex];
-  if (!sourceTile || !targetTile || sourceTile.type === "group") return;
+  nestItemInContainer(tiles, sourceIndex, targetIndex);
+  saveTiles();
+  renderTiles();
+}
 
-  if (targetTile.type === "group") {
-    targetTile.tiles.push(sourceTile);
-    tiles.splice(sourceIndex, 1);
-  } else {
-    const group = { type: "group", title: "Новая группа", tiles: [targetTile, sourceTile] };
-    tiles.splice(sourceIndex, 1);
-    const adjustedTargetIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
-    tiles[adjustedTargetIndex] = group;
+function createOrExtendActiveGroup(sourceIndex, targetIndex) {
+  const path = [...activeGroupPath];
+  const group = getActiveGroup();
+  if (!group) return;
+
+  nestItemInContainer(group.tiles, sourceIndex, targetIndex);
+  if (group.tiles.length === 1) {
+    getParentTiles(path).splice(path[path.length - 1], 1, group.tiles[0]);
+    saveTiles();
+    renderTiles();
+    if (path.length === 1) {
+      groupDialogEl.close();
+    } else {
+      openGroupDialog(path.slice(0, -1));
+    }
+    return;
   }
 
   saveTiles();
   renderTiles();
+  openGroupDialog(path);
+}
+
+function nestItemInContainer(container, sourceIndex, targetIndex) {
+  const sourceTile = container[sourceIndex];
+  const targetTile = container[targetIndex];
+  if (!sourceTile || !targetTile || sourceIndex === targetIndex) return;
+
+  if (targetTile.type === "group") {
+    targetTile.tiles.push(sourceTile);
+    container.splice(sourceIndex, 1);
+    return;
+  }
+
+  const group = { type: "group", title: "Новая группа", tiles: [targetTile, sourceTile] };
+  container.splice(sourceIndex, 1);
+  const adjustedTargetIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+  container[adjustedTargetIndex] = group;
 }
 
 function reorderTiles(sourceIndex, targetIndex, mode) {
@@ -583,31 +775,48 @@ function reorderTiles(sourceIndex, targetIndex, mode) {
   renderTiles();
 }
 
-function reorderGroupTiles(sourceIndex, targetIndex) {
-  const group = tiles[activeGroupIndex];
+function reorderGroupTiles(sourceIndex, targetIndex, mode) {
+  const group = getActiveGroup();
   if (!group || group.type !== "group" || sourceIndex === targetIndex) return;
 
-  const sourceTile = group.tiles[sourceIndex];
-  const targetTile = group.tiles[targetIndex];
-  if (!sourceTile || !targetTile) return;
+  const [tile] = group.tiles.splice(sourceIndex, 1);
+  if (!tile) return;
 
-  group.tiles[sourceIndex] = targetTile;
-  group.tiles[targetIndex] = sourceTile;
+  let insertAt = targetIndex - (sourceIndex < targetIndex ? 1 : 0);
+  if (mode === "move-after") insertAt += 1;
+  group.tiles.splice(insertAt, 0, tile);
   saveTiles();
   renderTiles();
-  openGroupDialog(activeGroupIndex);
+  openGroupDialog(activeGroupPath);
 }
 
-function extractTileFromGroup(groupTileIndex) {
-  const group = tiles[activeGroupIndex];
-  if (!group || group.type !== "group" || !group.tiles[groupTileIndex]) return;
+function moveGroupTileToMain(groupTileIndex, intent) {
+  const group = getActiveGroup();
+  const targetTile = tiles[intent.targetIndex];
+  if (activeGroupPath.length !== 1
+    || !group
+    || !group.tiles[groupTileIndex]
+    || !targetTile) {
+    return;
+  }
 
   const [extractedTile] = group.tiles.splice(groupTileIndex, 1);
   if (group.tiles.length === 1) {
-    const [remainingTile] = group.tiles;
-    tiles.splice(activeGroupIndex, 1, remainingTile, extractedTile);
+    tiles.splice(activeGroupPath[0], 1, group.tiles[0]);
+  }
+
+  const targetIndex = tiles.indexOf(targetTile);
+  if (targetIndex < 0) return;
+
+  if (intent.mode === "group") {
+    if (targetTile.type === "group") {
+      targetTile.tiles.push(extractedTile);
+    } else {
+      tiles[targetIndex] = { type: "group", title: "Новая группа", tiles: [targetTile, extractedTile] };
+    }
   } else {
-    tiles.splice(activeGroupIndex + 1, 0, extractedTile);
+    const insertAt = intent.mode === "move-before" ? targetIndex : targetIndex + 1;
+    tiles.splice(insertAt, 0, extractedTile);
   }
 
   saveTiles();
@@ -615,16 +824,47 @@ function extractTileFromGroup(groupTileIndex) {
   groupDialogEl.close();
 }
 
-function deleteTileFromGroup(groupIndex, groupTileIndex) {
-  const group = tiles[groupIndex];
-  if (!group || group.type !== "group") return;
+function extractTileFromGroup(groupTileIndex) {
+  const path = [...activeGroupPath];
+  const group = getGroupAtPath(path);
+  const parentTiles = getParentTiles(path);
+  const groupIndex = path[path.length - 1];
+  if (!group || !parentTiles || !group.tiles[groupTileIndex]) return;
+
+  const [extractedTile] = group.tiles.splice(groupTileIndex, 1);
+  if (group.tiles.length === 1) {
+    const [remainingTile] = group.tiles;
+    parentTiles.splice(groupIndex, 1, remainingTile, extractedTile);
+  } else {
+    parentTiles.splice(groupIndex + 1, 0, extractedTile);
+  }
+
+  saveTiles();
+  renderTiles();
+  if (path.length === 1) {
+    groupDialogEl.close();
+  } else {
+    openGroupDialog(path.slice(0, -1));
+  }
+}
+
+function deleteTileFromGroup(groupPath, groupTileIndex) {
+  const group = getGroupAtPath(groupPath);
+  const tile = group?.tiles[groupTileIndex];
+  if (!group || !tile) return;
+  if (tile.type === "group" && !window.confirm("Удалить группу и все плитки внутри?")) return;
 
   group.tiles.splice(groupTileIndex, 1);
   if (group.tiles.length === 1) {
-    tiles.splice(groupIndex, 1, group.tiles[0]);
-    groupDialogEl.close();
+    const parentTiles = getParentTiles(groupPath);
+    parentTiles.splice(groupPath[groupPath.length - 1], 1, group.tiles[0]);
+    if (groupPath.length === 1) {
+      groupDialogEl.close();
+    } else {
+      openGroupDialog(groupPath.slice(0, -1));
+    }
   } else {
-    openGroupDialog(groupIndex);
+    openGroupDialog(groupPath);
   }
 
   saveTiles();
