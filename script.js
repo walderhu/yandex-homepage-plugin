@@ -25,7 +25,6 @@ const titleInput = document.querySelector(".tile-title-input");
 const urlInput = document.querySelector(".tile-url-input");
 const imageInput = document.querySelector(".tile-image-input");
 const previewImg = document.querySelector(".tile-preview-img");
-const previewFallback = document.querySelector(".tile-preview-fallback");
 const pasteToggle = document.querySelector(".tile-paste-toggle");
 const fileButton = document.querySelector(".tile-file-button");
 const cancelButton = document.querySelector(".tile-cancel");
@@ -242,7 +241,6 @@ function updateImagePreview(src) {
   previewImg.src = isPlaceholder ? DEFAULT_PLACEHOLDER_IMAGE : src;
   previewImg.classList.toggle("is-placeholder", isPlaceholder);
   previewImg.hidden = false;
-  previewFallback.hidden = true;
 }
 
 async function readImageFromClipboard() {
