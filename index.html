@@ -41,26 +41,26 @@
     <dialog class="tile-dialog" aria-labelledby="tile-dialog-title">
       <form class="tile-form" method="dialog">
         <h2 id="tile-dialog-title">Добавить плитку</h2>
-        <label>
-          Название
-          <input class="tile-title-input" type="text" autocomplete="off" required>
-        </label>
-        <label>
-          Ссылка
-          <input class="tile-url-input" type="text" autocomplete="off" placeholder="https://example.com" required>
-        </label>
-        <div class="tile-image-editor">
+        <div class="tile-form-main">
           <div class="tile-image-preview" aria-label="Предпросмотр фото">
             <img class="tile-preview-img" src="" alt="">
-            <span class="tile-preview-fallback">+</span>
+            <span class="tile-preview-fallback">Фото</span>
+            <div class="tile-image-tools">
+              <button class="tile-paste-toggle" type="button">Из буфера</button>
+              <button class="tile-file-button" type="button">С компьютера</button>
+            </div>
           </div>
-          <div class="tile-image-tools">
-            <button class="tile-paste-toggle" type="button">Из буфера</button>
-            <button class="tile-file-button" type="button">С компьютера</button>
+          <div class="tile-fields">
+            <label>
+              Название
+              <input class="tile-title-input" type="text" autocomplete="off" required>
+            </label>
+            <label>
+              Ссылка
+              <input class="tile-url-input" type="text" autocomplete="off" placeholder="https://example.com" required>
+            </label>
+            <input class="tile-image-input" type="file" accept="image/*" hidden>
           </div>
-          <input class="tile-paste-input" type="text" autocomplete="off" placeholder="Вставь ссылку или фото из буфера" hidden>
-          <input class="tile-image-input" type="file" accept="image/*" hidden>
-          <p class="tile-image-hint">По умолчанию подтянется иконка сайта.</p>
         </div>
         <div class="tile-form-actions">
           <button class="tile-cancel" type="button">Отмена</button>

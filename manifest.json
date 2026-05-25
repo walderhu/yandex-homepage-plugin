@@ -6,6 +6,9 @@
   "chrome_url_overrides": {
     "newtab": "index.html"
   },
+  "permissions": [
+    "clipboardRead"
+  ],
   "icons": {
     "128": "assets/icon.png"
   },

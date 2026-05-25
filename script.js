@@ -1,4 +1,5 @@
 const TILE_STORAGE_KEY = "homepage.tiles.v1";
+const DEFAULT_PLACEHOLDER_IMAGE = "assets/icon.png";
 
 const defaultTiles = [
   {
@@ -26,7 +27,6 @@ const imageInput = document.querySelector(".tile-image-input");
 const previewImg = document.querySelector(".tile-preview-img");
 const previewFallback = document.querySelector(".tile-preview-fallback");
 const pasteToggle = document.querySelector(".tile-paste-toggle");
-const pasteInput = document.querySelector(".tile-paste-input");
 const fileButton = document.querySelector(".tile-file-button");
 const cancelButton = document.querySelector(".tile-cancel");
 
@@ -88,6 +88,8 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+dialogEl.addEventListener("paste", handleDialogPaste);
+
 cancelButton.addEventListener("click", () => {
   dialogEl.close();
 });
@@ -99,27 +101,8 @@ urlInput.addEventListener("input", () => {
 });
 
 pasteToggle.addEventListener("click", () => {
-  pasteInput.hidden = false;
-  pasteInput.focus();
-});
-
-pasteInput.addEventListener("input", () => {
-  const value = pasteInput.value.trim();
-  if (!value) return;
-
-  selectedImage = value;
-  updateImagePreview(selectedImage);
-});
-
-pasteInput.addEventListener("paste", async (event) => {
-  const file = findPastedImage(event.clipboardData);
-  if (!file) return;
-
-  event.preventDefault();
-  selectedImage = await readFileAsDataUrl(file);
-  pasteInput.value = "";
-  pasteInput.hidden = true;
-  updateImagePreview(selectedImage);
+  readImageFromClipboard();
+  dialogEl.focus();
 });
 
 fileButton.addEventListener("click", () => {
@@ -131,8 +114,6 @@ imageInput.addEventListener("change", async () => {
   if (!file || !file.type.startsWith("image/")) return;
 
   selectedImage = await readFileAsDataUrl(file);
-  pasteInput.value = "";
-  pasteInput.hidden = true;
   updateImagePreview(selectedImage);
 });
 
@@ -190,16 +171,11 @@ function renderTile(tile, index) {
   const icon = document.createElement("span");
   icon.className = "icon tile-photo";
 
-  const imageUrl = tile.image || faviconUrl(tile.url);
-  if (imageUrl) {
-    const img = document.createElement("img");
-    img.src = imageUrl;
-    img.alt = "";
-    img.loading = "lazy";
-    icon.append(img);
-  } else {
-    icon.textContent = tile.title.trim().slice(0, 1).toUpperCase();
-  }
+  const img = document.createElement("img");
+  img.src = tile.image || faviconUrl(tile.url) || DEFAULT_PLACEHOLDER_IMAGE;
+  img.alt = "";
+  img.loading = "lazy";
+  icon.append(img);
 
   const caption = document.createElement("span");
   caption.className = "caption";
@@ -225,8 +201,6 @@ function openTileDialog(index) {
   titleInput.value = tile.title || "";
   urlInput.value = tile.url || "";
   imageInput.value = "";
-  pasteInput.value = "";
-  pasteInput.hidden = true;
   selectedImage = tile.image || "";
   updateImagePreview(selectedImage || faviconUrl(tile.url || ""));
 
@@ -264,26 +238,76 @@ function faviconUrl(value) {
 }
 
 function updateImagePreview(src) {
-  if (src) {
-    previewImg.src = src;
-    previewImg.hidden = false;
-    previewFallback.hidden = true;
-    return;
-  }
-
-  previewImg.removeAttribute("src");
-  previewImg.hidden = true;
-  previewFallback.hidden = false;
+  const isPlaceholder = !src;
+  previewImg.src = isPlaceholder ? DEFAULT_PLACEHOLDER_IMAGE : src;
+  previewImg.classList.toggle("is-placeholder", isPlaceholder);
+  previewImg.hidden = false;
+  previewFallback.hidden = true;
 }
 
-function findPastedImage(data) {
+async function readImageFromClipboard() {
+  try {
+    if (navigator.clipboard?.read) {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imageType = item.types.find((type) => type.startsWith("image/"));
+        if (!imageType) continue;
+
+        const blob = await item.getType(imageType);
+        selectedImage = await readFileAsDataUrl(blob);
+        updateImagePreview(selectedImage);
+        return;
+      }
+    }
+
+    if (navigator.clipboard?.readText) {
+      const text = (await navigator.clipboard.readText()).trim();
+      if (text) {
+        selectedImage = text;
+        updateImagePreview(selectedImage);
+        return;
+      }
+    }
+  } catch (error) {
+    console.error(error);
+  }
+
+  alert("Не удалось прочитать фото или ссылку из буфера.");
+}
+
+async function handleDialogPaste(event) {
+  const item = readPastedData(event.clipboardData);
+  if (!item) return;
+
+  event.preventDefault();
+  await applyClipboardItem(item);
+}
+
+function readPastedData(data) {
+  let imageFile = null;
+
   for (const item of data.items) {
     if (item.type.startsWith("image/")) {
-      return item.getAsFile();
+      imageFile = item.getAsFile();
     }
   }
 
-  return null;
+  if (imageFile) {
+    return { type: "image", file: imageFile };
+  }
+
+  const text = data.getData("text/plain").trim();
+  return text ? { type: "text", text } : null;
+}
+
+async function applyClipboardItem(item) {
+  if (item.type === "image") {
+    selectedImage = await readFileAsDataUrl(item.file);
+  } else {
+    selectedImage = item.text;
+  }
+
+  updateImagePreview(selectedImage);
 }
 
 function readFileAsDataUrl(file) {
