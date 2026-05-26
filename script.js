@@ -71,6 +71,11 @@ requestAnimationFrame(() => {
 
 smartboxEl.addEventListener("paste", handleSmartboxPaste);
 
+smartboxEl.addEventListener("click", (event) => {
+  if (event.target.closest("button")) return;
+  smartboxInput.focus();
+});
+
 scanButton.addEventListener("click", () => {
   smartboxImageInput.click();
 });
@@ -223,6 +228,12 @@ document.addEventListener("keydown", (event) => {
       event.preventDefault();
       closeGroupLevel();
     }
+    return;
+  }
+
+  if (shouldCaptureSmartboxText(event)) {
+    event.preventDefault();
+    insertTextIntoSmartbox(event.key);
   }
 });
 
@@ -1018,6 +1029,34 @@ async function handleSmartboxPaste(event) {
 
   event.preventDefault();
   await searchByImage(imageFile);
+}
+
+function shouldCaptureSmartboxText(event) {
+  if (event.defaultPrevented
+    || event.ctrlKey
+    || event.altKey
+    || event.metaKey
+    || event.isComposing
+    || event.key.length !== 1
+    || dialogEl.open
+    || groupDialogEl.open) {
+    return false;
+  }
+
+  return !isTextEntryTarget(event.target);
+}
+
+function isTextEntryTarget(target) {
+  return Boolean(target?.closest?.("input, textarea, select, [contenteditable=''], [contenteditable='true']"));
+}
+
+function insertTextIntoSmartbox(text) {
+  smartboxInput.focus();
+
+  const selectionStart = smartboxInput.selectionStart ?? smartboxInput.value.length;
+  const selectionEnd = smartboxInput.selectionEnd ?? selectionStart;
+  smartboxInput.setRangeText(text, selectionStart, selectionEnd, "end");
+  smartboxInput.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 async function searchByImage(file) {
