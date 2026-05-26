@@ -99,11 +99,50 @@ a {
   outline: 0;
   color: #252629;
   background: transparent;
-  font-size: 20px;
+  font-size: 28px;
 }
 
 .smartbox input::placeholder {
   color: var(--placeholder);
+}
+
+.smartbox.is-image-searching .smartbox-input {
+  display: none;
+}
+
+.smartbox input::-webkit-search-cancel-button,
+.smartbox input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
+.smartbox-image-status {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: #252629;
+  font-size: 24px;
+}
+
+.smartbox-image-status[hidden] {
+  display: none;
+}
+
+.smartbox-image-preview {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.smartbox-image-status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .smartbox button {
@@ -124,6 +163,13 @@ a {
   height: 42px;
   object-fit: contain;
   transform-origin: center;
+}
+
+.smartbox button:focus-visible,
+.tile:focus-visible,
+.controls:focus-visible {
+  outline: 3px solid #ffdb4d;
+  outline-offset: 4px;
 }
 
 .microphone img {

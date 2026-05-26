@@ -17,13 +17,18 @@
       </div>
 
       <form class="smartbox" action="https://yandex.ru/search/" method="get">
-        <input type="search" name="text" autocomplete="off" placeholder="Введите запрос или адрес">
+        <input class="smartbox-input" type="search" name="text" autocomplete="off" placeholder="Введите запрос или адрес" autofocus>
+        <div class="smartbox-image-status" aria-live="polite" hidden>
+          <img class="smartbox-image-preview" src="" alt="">
+          <span class="smartbox-image-status-text">Ищу по фото...</span>
+        </div>
         <button class="microphone" type="button" aria-label="Голосовой поиск">
           <img src="assets/microphone.png" alt="">
         </button>
         <button class="scan" type="button" aria-label="Поиск по картинке">
           <img src="assets/camera.png" alt="">
         </button>
+        <input class="smartbox-image-input" type="file" accept="image/*" hidden>
       </form>
 
       <section class="tiles" aria-label="Быстрые ссылки">
@@ -38,7 +43,7 @@
       <button type="button" data-action="delete">Удалить</button>
     </div>
 
-    <dialog class="group-dialog" aria-labelledby="group-dialog-title">
+    <dialog class="group-dialog" aria-labelledby="group-dialog-title" tabindex="-1">
       <header class="group-header">
         <button class="group-back" type="button" aria-label="Назад" hidden>&larr;</button>
         <input class="group-dialog-title" id="group-dialog-title" type="text" aria-label="Название группы">

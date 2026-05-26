@@ -1,6 +1,8 @@
 const TILE_STORAGE_KEY = "homepage.tiles.v1";
 const DEFAULT_PLACEHOLDER_IMAGE = "assets/icon.png";
 const NESTED_GROUP_TEST_ID = "nested-groups-v1";
+const YANDEX_IMAGE_UPLOAD_URL = "https://yandex.ru/images-apphost/image-download";
+const YANDEX_IMAGE_RESULT_URL = "https://yandex.ru/images/search?rpt=imageview&url=";
 
 const defaultTiles = [
   {
@@ -19,6 +21,13 @@ const defaultTiles = [
 
 const tilesEl = document.querySelector(".tiles");
 const pageEl = document.querySelector(".new-tab");
+const smartboxEl = document.querySelector(".smartbox");
+const smartboxInput = document.querySelector(".smartbox-input");
+const smartboxImageInput = document.querySelector(".smartbox-image-input");
+const smartboxImageStatus = document.querySelector(".smartbox-image-status");
+const smartboxImagePreview = document.querySelector(".smartbox-image-preview");
+const smartboxImageStatusText = document.querySelector(".smartbox-image-status-text");
+const scanButton = document.querySelector(".scan");
 const menuEl = document.querySelector(".tile-menu");
 const groupDialogEl = document.querySelector(".group-dialog");
 const groupTitleEl = document.querySelector(".group-dialog-title");
@@ -51,8 +60,32 @@ let draggedGroupTileIndex = null;
 let activeGroupTileIndex = null;
 let editingGroupPath = null;
 let editingGroupTileIndex = null;
+let isImageSearchRunning = false;
+let smartboxImagePreviewUrl = "";
 
 renderTiles();
+
+requestAnimationFrame(() => {
+  smartboxInput?.focus();
+});
+
+smartboxEl.addEventListener("paste", handleSmartboxPaste);
+
+scanButton.addEventListener("click", () => {
+  smartboxImageInput.click();
+});
+
+smartboxImageInput.addEventListener("change", async () => {
+  const file = smartboxImageInput.files?.[0];
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    smartboxImageInput.value = "";
+    return;
+  }
+
+  await searchByImage(file);
+});
 
 tilesEl.addEventListener("click", (event) => {
   const tileEl = event.target.closest(".tile");
@@ -621,6 +654,7 @@ function openGroupDialog(path) {
   );
   pageEl.classList.add("is-group-open");
   if (!groupDialogEl.open) groupDialogEl.show();
+  groupDialogEl.focus({ preventScroll: true });
 }
 
 function saveGroupTitle() {
@@ -965,6 +999,125 @@ async function handleDialogPaste(event) {
   event.preventDefault();
   selectedImage = await readFileAsDataUrl(imageFile);
   updateImagePreview(selectedImage);
+}
+
+async function handleSmartboxPaste(event) {
+  const imageFile = readPastedImage(event.clipboardData);
+  if (!imageFile) return;
+
+  event.preventDefault();
+  await searchByImage(imageFile);
+}
+
+async function searchByImage(file) {
+  if (isImageSearchRunning) return;
+
+  isImageSearchRunning = true;
+  scanButton.disabled = true;
+  showImageSearchStatus(file, "Готовлю фото...");
+
+  try {
+    const jpegBlob = await normalizeSearchImage(file);
+    setImageSearchStatus("Загружаю фото в Яндекс...");
+    const imageUrl = await uploadImageToYandex(jpegBlob);
+    setImageSearchStatus("Открываю поиск по фото...");
+    window.location.href = YANDEX_IMAGE_RESULT_URL + encodeURIComponent(imageUrl);
+  } catch (error) {
+    console.error(error);
+    alert(error.message || "Не удалось выполнить поиск по фото.");
+    hideImageSearchStatus();
+  } finally {
+    smartboxImageInput.value = "";
+    scanButton.disabled = false;
+    isImageSearchRunning = false;
+  }
+}
+
+function showImageSearchStatus(file, message) {
+  if (smartboxImagePreviewUrl) {
+    URL.revokeObjectURL(smartboxImagePreviewUrl);
+  }
+
+  smartboxImagePreviewUrl = URL.createObjectURL(file);
+  smartboxImagePreview.src = smartboxImagePreviewUrl;
+  smartboxImageStatus.hidden = false;
+  smartboxEl.classList.add("is-image-searching");
+  setImageSearchStatus(message);
+}
+
+function setImageSearchStatus(message) {
+  smartboxImageStatusText.textContent = message;
+}
+
+function hideImageSearchStatus() {
+  smartboxEl.classList.remove("is-image-searching");
+  smartboxImageStatus.hidden = true;
+  smartboxImagePreview.removeAttribute("src");
+
+  if (smartboxImagePreviewUrl) {
+    URL.revokeObjectURL(smartboxImagePreviewUrl);
+    smartboxImagePreviewUrl = "";
+  }
+}
+
+async function normalizeSearchImage(blob) {
+  const bitmap = await createImageBitmap(blob);
+  const limit = 1600;
+  const scale = Math.min(1, limit / Math.max(bitmap.width, bitmap.height));
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close?.();
+
+  if (canvas.convertToBlob) {
+    return canvas.convertToBlob({
+      type: "image/jpeg",
+      quality: 0.88,
+    });
+  }
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (result) => result ? resolve(result) : reject(new Error("Не удалось подготовить фото.")),
+      "image/jpeg",
+      0.88,
+    );
+  });
+}
+
+function createCanvas(width, height) {
+  if (window.OffscreenCanvas) {
+    return new OffscreenCanvas(width, height);
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  return canvas;
+}
+
+async function uploadImageToYandex(blob) {
+  const response = await fetch(YANDEX_IMAGE_UPLOAD_URL, {
+    method: "POST",
+    headers: {
+      accept: "*/*",
+      "content-type": "image/jpeg",
+    },
+    body: await blob.arrayBuffer(),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Yandex upload failed: HTTP ${response.status}.`);
+  }
+
+  const payload = await response.json();
+  if (!payload?.url) {
+    throw new Error("Yandex did not return an image URL.");
+  }
+
+  return payload.url;
 }
 
 function queueTitleLookup() {
