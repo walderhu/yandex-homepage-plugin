@@ -152,8 +152,6 @@ menuEl.addEventListener("click", (event) => {
   if (action === "edit") {
     if (tiles[tileIndex]?.type === "group") {
       openGroupDialog([tileIndex]);
-      groupTitleEl.focus();
-      groupTitleEl.select();
     } else {
       openTileDialog(tileIndex);
     }
@@ -201,7 +199,6 @@ groupBackButton.addEventListener("click", () => {
 groupCloseButton.addEventListener("click", () => groupDialogEl.close());
 groupTitleEl.addEventListener("change", saveGroupTitle);
 groupTitleEl.addEventListener("blur", saveGroupTitle);
-groupTitleEl.addEventListener("focus", () => groupTitleEl.select());
 groupTitleEl.addEventListener("click", () => groupTitleEl.select());
 groupTitleEl.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
@@ -250,8 +247,6 @@ groupMenuEl.addEventListener("click", (event) => {
   if (action === "edit") {
     if (getGroupAtPath(groupPath)?.tiles[tileIndex]?.type === "group") {
       openGroupDialog([...groupPath, tileIndex]);
-      groupTitleEl.focus();
-      groupTitleEl.select();
     } else {
       groupDialogEl.close();
       openGroupTileDialog(groupPath, tileIndex);
