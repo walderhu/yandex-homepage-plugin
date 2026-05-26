@@ -219,15 +219,17 @@ document.addEventListener("click", (event) => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     hideMenu();
+    if (groupDialogEl.open) {
+      event.preventDefault();
+      closeGroupLevel();
+    }
   }
 });
 
 dialogEl.addEventListener("paste", handleDialogPaste);
 dialogEl.addEventListener("close", resetTitleLookup);
 groupBackButton.addEventListener("click", () => {
-  if (activeGroupPath.length > 1) {
-    openGroupDialog(activeGroupPath.slice(0, -1));
-  }
+  closeGroupLevel();
 });
 groupCloseButton.addEventListener("click", () => groupDialogEl.close());
 groupTitleEl.addEventListener("change", saveGroupTitle);
@@ -655,6 +657,15 @@ function openGroupDialog(path) {
   pageEl.classList.add("is-group-open");
   if (!groupDialogEl.open) groupDialogEl.show();
   groupDialogEl.focus({ preventScroll: true });
+}
+
+function closeGroupLevel() {
+  if (activeGroupPath.length > 1) {
+    openGroupDialog(activeGroupPath.slice(0, -1));
+    return;
+  }
+
+  groupDialogEl.close();
 }
 
 function saveGroupTitle() {
