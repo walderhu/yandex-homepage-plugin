@@ -1,3 +1,18 @@
+const BOOKMARK_QUEUE_STORAGE_KEY = "homepage.bookmarkQueue.v1";
+const NEW_TAB_REDIRECT_URL = chrome.runtime.getURL("index.html");
+
+chrome.bookmarks?.onCreated?.addListener((id, bookmark) => {
+  enqueueBookmark(bookmark).catch((error) => {
+    console.error("Не удалось сохранить закладку для новой вкладки:", error);
+  });
+});
+
+chrome.action?.onClicked?.addListener(() => {
+  chrome.tabs.create({
+    url: NEW_TAB_REDIRECT_URL,
+  });
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "request-youtube-title") {
     requestYouTubeTitle(message.url)
@@ -23,6 +38,39 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return true;
 });
+
+async function enqueueBookmark(bookmark) {
+  if (!isBookmarkTile(bookmark)) return;
+
+  const saved = await chrome.storage.local.get(BOOKMARK_QUEUE_STORAGE_KEY);
+  const queue = Array.isArray(saved[BOOKMARK_QUEUE_STORAGE_KEY])
+    ? saved[BOOKMARK_QUEUE_STORAGE_KEY]
+    : [];
+
+  const nextBookmark = {
+    id: bookmark.id,
+    title: bookmark.title || "",
+    url: bookmark.url,
+  };
+
+  const nextQueue = [
+    ...queue.filter((item) => item?.id !== bookmark.id && item?.url !== bookmark.url),
+    nextBookmark,
+  ].slice(-100);
+
+  await chrome.storage.local.set({ [BOOKMARK_QUEUE_STORAGE_KEY]: nextQueue });
+}
+
+function isBookmarkTile(bookmark) {
+  if (!bookmark?.url) return false;
+
+  try {
+    const url = new URL(bookmark.url);
+    return /^https?:$/.test(url.protocol);
+  } catch {
+    return false;
+  }
+}
 
 async function requestYouTubeTitle(url) {
   const endpoint = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;

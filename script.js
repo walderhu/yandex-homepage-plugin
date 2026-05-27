@@ -1,4 +1,5 @@
 const TILE_STORAGE_KEY = "homepage.tiles.v1";
+const BOOKMARK_QUEUE_STORAGE_KEY = "homepage.bookmarkQueue.v1";
 const DEFAULT_PLACEHOLDER_IMAGE = "assets/icon.png";
 const NESTED_GROUP_TEST_ID = "nested-groups-v1";
 const YANDEX_IMAGE_UPLOAD_URL = "https://yandex.ru/images-apphost/image-download";
@@ -64,6 +65,8 @@ let isImageSearchRunning = false;
 let smartboxImagePreviewUrl = "";
 
 renderTiles();
+syncQueuedBookmarks();
+watchBrowserBookmarks();
 
 requestAnimationFrame(() => {
   smartboxInput?.focus();
@@ -525,6 +528,103 @@ function createNestedTestGroup() {
 
 function saveTiles() {
   localStorage.setItem(TILE_STORAGE_KEY, JSON.stringify(tiles.filter(Boolean)));
+}
+
+async function syncQueuedBookmarks() {
+  if (!globalThis.chrome?.storage?.local) return;
+
+  try {
+    const saved = await globalThis.chrome.storage.local.get(BOOKMARK_QUEUE_STORAGE_KEY);
+    const bookmarks = saved[BOOKMARK_QUEUE_STORAGE_KEY];
+    if (!Array.isArray(bookmarks) || bookmarks.length === 0) return;
+
+    let changed = false;
+    for (const bookmark of bookmarks) {
+      changed = addBookmarkTile(bookmark) || changed;
+    }
+
+    await globalThis.chrome.storage.local.remove(BOOKMARK_QUEUE_STORAGE_KEY);
+
+    if (changed) {
+      saveTiles();
+      renderTiles();
+    }
+  } catch (error) {
+    console.error("Не удалось загрузить новые закладки:", error);
+  }
+}
+
+function watchBrowserBookmarks() {
+  if (!globalThis.chrome?.bookmarks?.onCreated) return;
+
+  globalThis.chrome.bookmarks.onCreated.addListener((id, bookmark) => {
+    if (!addBookmarkTile(bookmark)) return;
+
+    saveTiles();
+    renderTiles();
+    window.setTimeout(() => discardQueuedBookmark(bookmark), 250);
+  });
+}
+
+function addBookmarkTile(bookmark) {
+  const url = validBookmarkUrl(bookmark?.url);
+  if (!url || hasTileUrl(tiles, url)) return false;
+
+  tiles.push({
+    title: bookmark.title?.trim() || bookmarkTitleFromUrl(url),
+    url,
+  });
+
+  return true;
+}
+
+function hasTileUrl(items, url) {
+  return items.some((tile) => {
+    if (tile?.type === "group") {
+      return hasTileUrl(tile.tiles || [], url);
+    }
+
+    return validBookmarkUrl(tile?.url) === url;
+  });
+}
+
+function validBookmarkUrl(value) {
+  try {
+    const url = new URL(value);
+    return /^https?:$/.test(url.protocol) ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+function bookmarkTitleFromUrl(value) {
+  try {
+    return new URL(value).hostname.replace(/^www\./, "");
+  } catch {
+    return "Новая закладка";
+  }
+}
+
+async function discardQueuedBookmark(bookmark) {
+  if (!globalThis.chrome?.storage?.local || !bookmark?.url) return;
+
+  try {
+    const saved = await globalThis.chrome.storage.local.get(BOOKMARK_QUEUE_STORAGE_KEY);
+    const queue = saved[BOOKMARK_QUEUE_STORAGE_KEY];
+    if (!Array.isArray(queue) || queue.length === 0) return;
+
+    const nextQueue = queue.filter((item) => item?.id !== bookmark.id && item?.url !== bookmark.url);
+    if (nextQueue.length === queue.length) return;
+
+    if (nextQueue.length === 0) {
+      await globalThis.chrome.storage.local.remove(BOOKMARK_QUEUE_STORAGE_KEY);
+      return;
+    }
+
+    await globalThis.chrome.storage.local.set({ [BOOKMARK_QUEUE_STORAGE_KEY]: nextQueue });
+  } catch (error) {
+    console.error("Не удалось очистить очередь закладок:", error);
+  }
 }
 
 function renderTiles() {
