@@ -467,18 +467,13 @@ function loadTiles() {
   try {
     const savedTiles = JSON.parse(localStorage.getItem(TILE_STORAGE_KEY));
     if (Array.isArray(savedTiles)) {
-      const cleanTiles = savedTiles.filter((tile) => tile && !isTestTile(tile));
-      if (!hasNestedTestGroup(cleanTiles)) {
-        cleanTiles.push(createNestedTestGroup());
-      }
-      localStorage.setItem(TILE_STORAGE_KEY, JSON.stringify(cleanTiles));
-      return cleanTiles;
+      return savedTiles.filter((tile) => tile && !isTestTile(tile));
     }
   } catch {
     localStorage.removeItem(TILE_STORAGE_KEY);
   }
 
-  return [...defaultTiles, createNestedTestGroup()];
+  return [...defaultTiles];
 }
 
 function isTestTile(tile) {
