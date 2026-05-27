@@ -159,13 +159,41 @@ a {
   margin-left: 18px;
 }
 
+.voice-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-left: 25px;
+}
+
+.smartbox .voice-actions button {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  color: #bbbbbb;
+  background: #f4f4f4;
+  font-size: 30px;
+  font-family: Arial, sans-serif;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.smartbox .voice-submit {
+  color: #8c8c8c;
+}
+
+.smartbox.is-voice-processing .voice-actions {
+  display: none;
+}
+
 .smartbox.is-voice-active .smartbox-input {
   display: none;
 }
 
-.smartbox.is-voice-active .scan {
-  opacity: 0.42;
-  pointer-events: none;
+.smartbox.is-voice-active > .microphone,
+.smartbox.is-voice-active > .scan {
+  display: none;
 }
 
 .microphone.is-recording img {

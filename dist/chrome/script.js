@@ -1,5 +1,6 @@
 const TILE_STORAGE_KEY = "homepage.tiles.v1";
 const BOOKMARK_QUEUE_STORAGE_KEY = "homepage.bookmarkQueue.v1";
+const BOOKMARK_REMOVAL_QUEUE_STORAGE_KEY = "homepage.bookmarkRemovalQueue.v1";
 const DEFAULT_PLACEHOLDER_IMAGE = "assets/icon.png";
 const NESTED_GROUP_TEST_ID = "nested-groups-v1";
 const YANDEX_IMAGE_UPLOAD_URL = "https://yandex.ru/images-apphost/image-download";
@@ -66,10 +67,14 @@ let smartboxImagePreviewUrl = "";
 
 renderTiles();
 syncQueuedBookmarks();
+syncRemovedBookmarks();
 watchBrowserBookmarks();
 
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) syncQueuedBookmarks();
+  if (!document.hidden) {
+    syncQueuedBookmarks();
+    syncRemovedBookmarks();
+  }
 });
 
 requestAnimationFrame(() => {
@@ -584,11 +589,40 @@ async function syncQueuedBookmarks() {
   }
 }
 
+async function syncRemovedBookmarks() {
+  if (!globalThis.chrome?.storage?.local) return;
+
+  try {
+    const saved = await globalThis.chrome.storage.local.get(BOOKMARK_REMOVAL_QUEUE_STORAGE_KEY);
+    const removed = saved[BOOKMARK_REMOVAL_QUEUE_STORAGE_KEY];
+    if (!Array.isArray(removed) || removed.length === 0) return;
+
+    let changed = false;
+    for (const bookmark of removed) {
+      const url = validBookmarkUrl(bookmark?.url);
+      if (url) changed = removeTilesForUrl(url) || changed;
+    }
+
+    await globalThis.chrome.storage.local.remove(BOOKMARK_REMOVAL_QUEUE_STORAGE_KEY);
+
+    if (changed) {
+      saveTiles();
+      renderTiles();
+      if (groupDialogEl.open) {
+        groupDialogEl.close();
+      }
+    }
+  } catch (error) {
+    console.error("Не удалось удалить плитки удаленных закладок:", error);
+  }
+}
+
 function watchBrowserBookmarks() {
   if (globalThis.chrome?.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== "local" || !changes[BOOKMARK_QUEUE_STORAGE_KEY]?.newValue) return;
-      syncQueuedBookmarks();
+      if (area !== "local") return;
+      if (changes[BOOKMARK_QUEUE_STORAGE_KEY]?.newValue) syncQueuedBookmarks();
+      if (changes[BOOKMARK_REMOVAL_QUEUE_STORAGE_KEY]?.newValue) syncRemovedBookmarks();
     });
   }
 
@@ -623,6 +657,44 @@ function hasTileUrl(items, url) {
 
     return validBookmarkUrl(tile?.url) === url;
   });
+}
+
+function removeTilesForUrl(url) {
+  const previous = tiles;
+  tiles = removeUrlFromTileContainer(tiles, url);
+  return tiles !== previous;
+}
+
+function removeUrlFromTileContainer(items, url) {
+  let changed = false;
+  const nextItems = [];
+
+  for (const tile of items) {
+    if (tile?.type !== "group") {
+      if (validBookmarkUrl(tile?.url) === url) {
+        changed = true;
+      } else {
+        nextItems.push(tile);
+      }
+      continue;
+    }
+
+    const children = removeUrlFromTileContainer(tile.tiles || [], url);
+    if (children !== tile.tiles) changed = true;
+    if (children.length === 0) {
+      changed = true;
+      continue;
+    }
+    if (children.length === 1) {
+      changed = true;
+      nextItems.push(children[0]);
+      continue;
+    }
+
+    nextItems.push(children === tile.tiles ? tile : { ...tile, tiles: children });
+  }
+
+  return changed ? nextItems : items;
 }
 
 function validBookmarkUrl(value) {
@@ -1386,11 +1458,15 @@ const micButton = document.querySelector(".microphone");
 const voiceCaptureEl = document.querySelector(".voice-capture");
 const voiceStatusEl = document.querySelector(".voice-status");
 const waveBarsEl = document.querySelector(".wave-bars");
+const voiceCancelButton = document.querySelector(".voice-cancel");
+const voiceSubmitButton = document.querySelector(".voice-submit");
 const VOICE_TRANSCRIPTION_URL = "http://127.0.0.1:8765/transcribe";
 const WHISPER_MODEL = "whisper-large-v3-turbo";
 const VOICE_BAR_COUNT = 82;
 const VOICE_SILENCE_THRESHOLD = 0.018;
 const VOICE_SILENCE_STOP_MS = 3000;
+const VOICE_NOISE_MARGIN = 0.012;
+const VOICE_CALIBRATION_MS = 300;
 
 let voiceMediaRecorder = null;
 let voiceMediaStream = null;
@@ -1403,6 +1479,9 @@ let voiceIsProcessing = false;
 let voiceWaveSamples = [];
 let voiceHeardSpeech = false;
 let voiceLastSpeechAt = 0;
+let voiceNoiseFloor = 0;
+let voiceCalibrationEndsAt = 0;
+let voiceWasCancelled = false;
 
 createVoiceBars();
 
@@ -1417,6 +1496,9 @@ micButton.addEventListener("click", async () => {
   await startVoiceSearch();
 });
 
+voiceCancelButton.addEventListener("click", cancelVoiceSearch);
+voiceSubmitButton.addEventListener("click", stopVoiceSearch);
+
 async function startVoiceSearch() {
   if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
     alert("В этом браузере запись с микрофона не поддерживается.");
@@ -1424,12 +1506,19 @@ async function startVoiceSearch() {
   }
 
   try {
-    voiceMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    voiceMediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: false,
+      },
+    });
     const mimeType = getSupportedVoiceMimeType();
     voiceMediaRecorder = mimeType
       ? new MediaRecorder(voiceMediaStream, { mimeType })
       : new MediaRecorder(voiceMediaStream);
     voiceAudioChunks = [];
+    voiceWasCancelled = false;
 
     voiceAudioContext = new AudioContext();
     voiceAnalyser = voiceAudioContext.createAnalyser();
@@ -1447,6 +1536,8 @@ async function startVoiceSearch() {
     voiceWaveSamples = Array(VOICE_BAR_COUNT).fill(0);
     voiceHeardSpeech = false;
     voiceLastSpeechAt = 0;
+    voiceNoiseFloor = 0;
+    voiceCalibrationEndsAt = Date.now() + VOICE_CALIBRATION_MS;
     renderVoiceWave();
     showVoiceCapture("Говорите...");
     micButton.classList.add("is-recording");
@@ -1477,11 +1568,35 @@ function stopVoiceSearch() {
   }
 }
 
+function cancelVoiceSearch() {
+  if (!voiceIsRecording) return;
+
+  voiceWasCancelled = true;
+  voiceIsRecording = false;
+  window.cancelAnimationFrame(voiceAnimationId);
+  micButton.classList.remove("is-recording");
+  micButton.setAttribute("aria-label", "Голосовой поиск");
+  hideVoiceCapture();
+  smartboxInput.focus();
+
+  if (voiceMediaRecorder?.state !== "inactive") {
+    voiceMediaRecorder.stop();
+    return;
+  }
+
+  releaseVoiceResources();
+}
+
 async function handleVoiceRecordingComplete() {
   const mimeType = voiceMediaRecorder?.mimeType || "audio/webm";
   const extension = mimeType.includes("ogg") ? "ogg" : "webm";
   const audioBlob = new Blob(voiceAudioChunks, { type: mimeType });
   releaseVoiceResources();
+
+  if (voiceWasCancelled) {
+    voiceAudioChunks = [];
+    return;
+  }
 
   try {
     if (audioBlob.size < 1000) throw new Error("Запись слишком короткая.");
@@ -1538,7 +1653,19 @@ function animateVoiceWave() {
 
   const rawLevel = Math.sqrt(sumSquares / data.length);
   const now = Date.now();
-  if (rawLevel >= VOICE_SILENCE_THRESHOLD) {
+  if (now < voiceCalibrationEndsAt || !voiceNoiseFloor) {
+    voiceNoiseFloor = voiceNoiseFloor
+      ? voiceNoiseFloor * 0.94 + rawLevel * 0.06
+      : rawLevel;
+  } else if (rawLevel < voiceNoiseFloor + VOICE_NOISE_MARGIN) {
+    voiceNoiseFloor = voiceNoiseFloor * 0.98 + rawLevel * 0.02;
+  }
+
+  const speechThreshold = Math.max(
+    VOICE_SILENCE_THRESHOLD,
+    voiceNoiseFloor + VOICE_NOISE_MARGIN,
+  );
+  if (now >= voiceCalibrationEndsAt && rawLevel >= speechThreshold) {
     voiceHeardSpeech = true;
     voiceLastSpeechAt = now;
   } else if (voiceHeardSpeech && now - voiceLastSpeechAt >= VOICE_SILENCE_STOP_MS) {
@@ -1546,9 +1673,9 @@ function animateVoiceWave() {
     return;
   }
 
-  const level = rawLevel < VOICE_SILENCE_THRESHOLD
+  const level = rawLevel < speechThreshold
     ? 0
-    : Math.min(1, (rawLevel - VOICE_SILENCE_THRESHOLD) * 10);
+    : Math.min(1, (rawLevel - speechThreshold) * 10);
   voiceWaveSamples.shift();
   voiceWaveSamples.push(level);
   renderVoiceWave();

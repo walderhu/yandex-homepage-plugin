@@ -1,9 +1,16 @@
 const BOOKMARK_QUEUE_STORAGE_KEY = "homepage.bookmarkQueue.v1";
+const BOOKMARK_REMOVAL_QUEUE_STORAGE_KEY = "homepage.bookmarkRemovalQueue.v1";
 const NEW_TAB_REDIRECT_URL = chrome.runtime.getURL("index.html");
 
 chrome.bookmarks?.onCreated?.addListener((id, bookmark) => {
   enqueueBookmark(bookmark).catch((error) => {
     console.error("Не удалось сохранить закладку для новой вкладки:", error);
+  });
+});
+
+chrome.bookmarks?.onRemoved?.addListener((id, removeInfo) => {
+  enqueueRemovedBookmarks(removeInfo?.node).catch((error) => {
+    console.error("Не удалось удалить плитку для удаленной закладки:", error);
   });
 });
 
@@ -67,6 +74,49 @@ async function enqueueBookmark(bookmark) {
   ].slice(-100);
 
   await chrome.storage.local.set({ [BOOKMARK_QUEUE_STORAGE_KEY]: nextQueue });
+}
+
+async function enqueueRemovedBookmarks(node) {
+  const removedUrls = collectBookmarkUrls(node);
+  if (removedUrls.length === 0) return;
+
+  const saved = await chrome.storage.local.get([
+    BOOKMARK_QUEUE_STORAGE_KEY,
+    BOOKMARK_REMOVAL_QUEUE_STORAGE_KEY,
+  ]);
+  const added = Array.isArray(saved[BOOKMARK_QUEUE_STORAGE_KEY])
+    ? saved[BOOKMARK_QUEUE_STORAGE_KEY]
+    : [];
+  const removed = Array.isArray(saved[BOOKMARK_REMOVAL_QUEUE_STORAGE_KEY])
+    ? saved[BOOKMARK_REMOVAL_QUEUE_STORAGE_KEY]
+    : [];
+  const urlsToRemove = [];
+
+  for (const url of removedUrls) {
+    const remaining = await chrome.bookmarks.search({ url });
+    if (!remaining.some((item) => item.url === url)) {
+      urlsToRemove.push(url);
+    }
+  }
+  if (urlsToRemove.length === 0) return;
+
+  const nextRemoved = [
+    ...removed.filter((item) => !urlsToRemove.includes(item?.url)),
+    ...urlsToRemove.map((url) => ({ url })),
+  ].slice(-100);
+
+  await chrome.storage.local.set({
+    [BOOKMARK_QUEUE_STORAGE_KEY]: added.filter((item) => !urlsToRemove.includes(item?.url)),
+    [BOOKMARK_REMOVAL_QUEUE_STORAGE_KEY]: nextRemoved,
+  });
+}
+
+function collectBookmarkUrls(node) {
+  if (!node) return [];
+  return [
+    ...(isBookmarkTile(node) ? [node.url] : []),
+    ...(node.children || []).flatMap(collectBookmarkUrls),
+  ];
 }
 
 function isBookmarkTile(bookmark) {
