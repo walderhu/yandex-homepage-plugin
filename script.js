@@ -209,9 +209,16 @@ menuEl.addEventListener("click", (event) => {
   }
 
   if (action === "delete") {
-    if (tiles[tileIndex]?.type === "group"
+    const tile = tiles[tileIndex];
+    if (tile?.type === "group"
       && !window.confirm("Удалить группу и все плитки внутри?")) {
       return;
+    }
+
+    if (tile?.type === "group") {
+      collectTileUrls(tile).forEach(removeBookmarkForUrl);
+    } else if (tile?.url) {
+      removeBookmarkForUrl(tile.url);
     }
 
     tiles.splice(tileIndex, 1);
@@ -313,6 +320,12 @@ groupMenuEl.addEventListener("click", (event) => {
   }
 
   if (action === "delete") {
+    const groupTile = getGroupAtPath(groupPath)?.tiles[tileIndex];
+    if (groupTile?.type === "group") {
+      collectTileUrls(groupTile).forEach(removeBookmarkForUrl);
+    } else if (groupTile?.url) {
+      removeBookmarkForUrl(groupTile.url);
+    }
     deleteTileFromGroup(groupPath, tileIndex);
   }
 });
@@ -1365,4 +1378,23 @@ function readFileAsDataUrl(file) {
     reader.addEventListener("error", reject);
     reader.readAsDataURL(file);
   });
+}
+
+function collectTileUrls(tile) {
+  if (tile?.type === "group") {
+    return (tile.tiles || []).flatMap(collectTileUrls);
+  }
+  return tile?.url ? [tile.url] : [];
+}
+
+async function removeBookmarkForUrl(url) {
+  if (!globalThis.chrome?.bookmarks?.search) return;
+  try {
+    const results = await chrome.bookmarks.search({ url });
+    for (const bookmark of results) {
+      await chrome.bookmarks.remove(bookmark.id);
+    }
+  } catch (error) {
+    console.error("Не удалось удалить закладку:", error);
+  }
 }
