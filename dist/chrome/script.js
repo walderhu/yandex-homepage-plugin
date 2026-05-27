@@ -16,7 +16,7 @@ const defaultTiles = [
   },
   {
     title: "Extensions",
-    url: "browser://extensions/",
+    url: "chrome://extensions/",
   },
 ];
 
@@ -463,11 +463,23 @@ formEl.addEventListener("submit", async (event) => {
   dialogEl.close();
 });
 
+function migrateTileUrls(items) {
+  return items.map((tile) => {
+    if (!tile) return tile;
+    if (tile.type === "group") {
+      return { ...tile, tiles: migrateTileUrls(tile.tiles || []) };
+    }
+    return tile.url?.startsWith("browser://")
+      ? { ...tile, url: tile.url.replace("browser://", "chrome://") }
+      : tile;
+  });
+}
+
 function loadTiles() {
   try {
     const savedTiles = JSON.parse(localStorage.getItem(TILE_STORAGE_KEY));
     if (Array.isArray(savedTiles)) {
-      return savedTiles.filter((tile) => tile && !isTestTile(tile));
+      return migrateTileUrls(savedTiles.filter((tile) => tile && !isTestTile(tile)));
     }
   } catch {
     localStorage.removeItem(TILE_STORAGE_KEY);
