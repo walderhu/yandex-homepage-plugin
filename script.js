@@ -68,6 +68,10 @@ renderTiles();
 syncQueuedBookmarks();
 watchBrowserBookmarks();
 
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) syncQueuedBookmarks();
+});
+
 requestAnimationFrame(() => {
   smartboxInput?.focus();
 });
