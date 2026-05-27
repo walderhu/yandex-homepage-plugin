@@ -110,6 +110,76 @@ a {
   font-size: 24px;
 }
 
+.voice-capture {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: stretch;
+  min-width: 0;
+  height: 40px;
+}
+
+.voice-capture[hidden] {
+  display: none;
+}
+
+.wave-bars {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  height: 48px;
+  overflow: hidden;
+}
+
+.wave-bar {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #919191;
+  opacity: 0.72;
+  transition: height 70ms ease-out, opacity 70ms ease-out;
+}
+
+.voice-status {
+  display: none;
+  color: #75777d;
+  font-size: 18px;
+  white-space: nowrap;
+}
+
+.smartbox.is-voice-processing .wave-bars {
+  opacity: 0.28;
+}
+
+.smartbox.is-voice-processing .voice-status {
+  display: block;
+  margin-left: 18px;
+}
+
+.smartbox.is-voice-active .smartbox-input {
+  display: none;
+}
+
+.smartbox.is-voice-active .scan {
+  opacity: 0.42;
+  pointer-events: none;
+}
+
+.microphone.is-recording img {
+  opacity: 0.68;
+}
+
+.microphone.is-processing {
+  cursor: wait;
+}
+
+.microphone.is-processing img {
+  opacity: 0.42;
+}
+
 .smartbox input::placeholder {
   color: var(--placeholder);
 }

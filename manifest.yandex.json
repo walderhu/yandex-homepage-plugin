@@ -3,8 +3,11 @@
   "name": "Walderhu New Tab",
   "description": "Custom Yandex-style new tab page with editable tiles.",
   "version": "1.0.0",
-  "chrome_url_overrides": {
-    "newtab": "index.html"
+  "action": {
+    "default_title": "Открыть Walderhu",
+    "default_icon": {
+      "128": "assets/icon.png"
+    }
   },
   "background": {
     "service_worker": "background.js"

@@ -1,0 +1,58 @@
+/*
+ * Walderhu Firefox layout: keep normal top navigation and pin horizontal
+ * tabs to the lower window edge in the style of Yandex Browser.
+ */
+
+:root {
+  --walderhu-bottom-tabs-height: 42px;
+}
+
+#TabsToolbar {
+  position: fixed !important;
+  display: flex !important;
+  align-items: center !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: var(--walderhu-bottom-tabs-height) !important;
+  z-index: 10 !important;
+  background: var(--toolbar-bgcolor) !important;
+  border-top: 1px solid color-mix(in srgb, currentColor 16%, transparent) !important;
+}
+
+#TabsToolbar > .titlebar-spacer {
+  display: none !important;
+}
+
+#TabsToolbar > .titlebar-buttonbox-container {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  height: var(--urlbar-container-height, 40px) !important;
+  z-index: 20 !important;
+}
+
+#nav-bar {
+  padding-right: 138px !important;
+}
+
+#tabbrowser-tabs,
+#TabsToolbar-customization-target {
+  min-height: var(--walderhu-bottom-tabs-height) !important;
+}
+
+#browser {
+  margin-bottom: var(--walderhu-bottom-tabs-height) !important;
+}
+
+#main-window[inFullscreen="true"] #TabsToolbar {
+  visibility: collapse !important;
+}
+
+#main-window[inFullscreen="true"] #browser {
+  margin-bottom: 0 !important;
+}
+
+#main-window[inFullscreen="true"] #nav-bar {
+  padding-right: 0 !important;
+}

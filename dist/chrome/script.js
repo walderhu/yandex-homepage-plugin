@@ -1380,6 +1380,252 @@ function readFileAsDataUrl(file) {
   });
 }
 
+// -- Voice search ---------------------------------------------------------------
+
+const micButton = document.querySelector(".microphone");
+const voiceCaptureEl = document.querySelector(".voice-capture");
+const voiceStatusEl = document.querySelector(".voice-status");
+const waveBarsEl = document.querySelector(".wave-bars");
+const VOICE_TRANSCRIPTION_URL = "http://127.0.0.1:8765/transcribe";
+const WHISPER_MODEL = "whisper-large-v3-turbo";
+const VOICE_BAR_COUNT = 82;
+const VOICE_SILENCE_THRESHOLD = 0.018;
+const VOICE_SILENCE_STOP_MS = 3000;
+
+let voiceMediaRecorder = null;
+let voiceMediaStream = null;
+let voiceAudioChunks = [];
+let voiceAudioContext = null;
+let voiceAnalyser = null;
+let voiceAnimationId = null;
+let voiceIsRecording = false;
+let voiceIsProcessing = false;
+let voiceWaveSamples = [];
+let voiceHeardSpeech = false;
+let voiceLastSpeechAt = 0;
+
+createVoiceBars();
+
+micButton.addEventListener("click", async () => {
+  if (voiceIsProcessing) return;
+
+  if (voiceIsRecording) {
+    stopVoiceSearch();
+    return;
+  }
+
+  await startVoiceSearch();
+});
+
+async function startVoiceSearch() {
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    alert("В этом браузере запись с микрофона не поддерживается.");
+    return;
+  }
+
+  try {
+    voiceMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mimeType = getSupportedVoiceMimeType();
+    voiceMediaRecorder = mimeType
+      ? new MediaRecorder(voiceMediaStream, { mimeType })
+      : new MediaRecorder(voiceMediaStream);
+    voiceAudioChunks = [];
+
+    voiceAudioContext = new AudioContext();
+    voiceAnalyser = voiceAudioContext.createAnalyser();
+    voiceAnalyser.fftSize = 512;
+    voiceAnalyser.smoothingTimeConstant = 0.72;
+    voiceAudioContext.createMediaStreamSource(voiceMediaStream).connect(voiceAnalyser);
+
+    voiceMediaRecorder.addEventListener("dataavailable", (event) => {
+      if (event.data.size) voiceAudioChunks.push(event.data);
+    });
+    voiceMediaRecorder.addEventListener("stop", handleVoiceRecordingComplete, { once: true });
+    voiceMediaRecorder.start(120);
+
+    voiceIsRecording = true;
+    voiceWaveSamples = Array(VOICE_BAR_COUNT).fill(0);
+    voiceHeardSpeech = false;
+    voiceLastSpeechAt = 0;
+    renderVoiceWave();
+    showVoiceCapture("Говорите...");
+    micButton.classList.add("is-recording");
+    micButton.setAttribute("aria-label", "Остановить запись и искать");
+    animateVoiceWave();
+  } catch (error) {
+    releaseVoiceResources();
+    console.error("Microphone access error:", error);
+    alert("Не удалось получить доступ к микрофону.");
+  }
+}
+
+function stopVoiceSearch() {
+  if (!voiceIsRecording) return;
+
+  voiceIsRecording = false;
+  window.cancelAnimationFrame(voiceAnimationId);
+  setFlatVoiceWave();
+  voiceStatusEl.textContent = "Распознаю...";
+  smartboxEl.classList.add("is-voice-processing");
+  micButton.classList.remove("is-recording");
+  micButton.classList.add("is-processing");
+  micButton.disabled = true;
+  voiceIsProcessing = true;
+
+  if (voiceMediaRecorder?.state !== "inactive") {
+    voiceMediaRecorder.stop();
+  }
+}
+
+async function handleVoiceRecordingComplete() {
+  const mimeType = voiceMediaRecorder?.mimeType || "audio/webm";
+  const extension = mimeType.includes("ogg") ? "ogg" : "webm";
+  const audioBlob = new Blob(voiceAudioChunks, { type: mimeType });
+  releaseVoiceResources();
+
+  try {
+    if (audioBlob.size < 1000) throw new Error("Запись слишком короткая.");
+    const text = await transcribeVoice(audioBlob, extension);
+    if (!text) throw new Error("Речь не распознана.");
+
+    smartboxInput.value = text;
+    hideVoiceCapture();
+    smartboxEl.requestSubmit();
+  } catch (error) {
+    console.error("Voice transcription error:", error);
+    hideVoiceCapture();
+    smartboxInput.focus();
+    alert(error.message || "Не удалось распознать голосовой запрос.");
+  } finally {
+    voiceIsProcessing = false;
+    smartboxEl.classList.remove("is-voice-processing");
+    micButton.disabled = false;
+    micButton.classList.remove("is-processing");
+    micButton.setAttribute("aria-label", "Голосовой поиск");
+  }
+}
+
+function createVoiceBars() {
+  for (let index = 0; index < VOICE_BAR_COUNT; index += 1) {
+    const bar = document.createElement("span");
+    bar.className = "wave-bar";
+    waveBarsEl.append(bar);
+  }
+}
+
+function showVoiceCapture(message) {
+  voiceStatusEl.textContent = message;
+  smartboxEl.classList.add("is-voice-active");
+  voiceCaptureEl.hidden = false;
+}
+
+function hideVoiceCapture() {
+  smartboxEl.classList.remove("is-voice-active");
+  voiceCaptureEl.hidden = true;
+  setFlatVoiceWave();
+}
+
+function animateVoiceWave() {
+  if (!voiceIsRecording || !voiceAnalyser) return;
+
+  const data = new Uint8Array(voiceAnalyser.fftSize);
+  voiceAnalyser.getByteTimeDomainData(data);
+  let sumSquares = 0;
+  data.forEach((sample) => {
+    const value = (sample - 128) / 128;
+    sumSquares += value * value;
+  });
+
+  const rawLevel = Math.sqrt(sumSquares / data.length);
+  const now = Date.now();
+  if (rawLevel >= VOICE_SILENCE_THRESHOLD) {
+    voiceHeardSpeech = true;
+    voiceLastSpeechAt = now;
+  } else if (voiceHeardSpeech && now - voiceLastSpeechAt >= VOICE_SILENCE_STOP_MS) {
+    stopVoiceSearch();
+    return;
+  }
+
+  const level = rawLevel < VOICE_SILENCE_THRESHOLD
+    ? 0
+    : Math.min(1, (rawLevel - VOICE_SILENCE_THRESHOLD) * 10);
+  voiceWaveSamples.shift();
+  voiceWaveSamples.push(level);
+  renderVoiceWave();
+
+  voiceAnimationId = window.requestAnimationFrame(animateVoiceWave);
+}
+
+function renderVoiceWave() {
+  const bars = waveBarsEl.querySelectorAll(".wave-bar");
+  bars.forEach((bar, index) => {
+    const sample = voiceWaveSamples[index] || 0;
+    const height = sample ? 5 + sample * 43 : 5;
+    bar.style.height = `${height.toFixed(1)}px`;
+    bar.style.opacity = sample ? String(0.72 + sample * 0.24) : "0.48";
+  });
+}
+
+function setFlatVoiceWave() {
+  voiceWaveSamples = Array(VOICE_BAR_COUNT).fill(0);
+  renderVoiceWave();
+}
+
+function releaseVoiceResources() {
+  voiceMediaStream?.getTracks().forEach((track) => track.stop());
+  voiceMediaStream = null;
+  voiceAudioContext?.close();
+  voiceAudioContext = null;
+  voiceAnalyser = null;
+}
+
+function getSupportedVoiceMimeType() {
+  return ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"]
+    .find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) || "";
+}
+
+async function transcribeVoice(blob, extension) {
+  const formData = new FormData();
+  formData.append("file", new File([blob], `voice.${extension}`, { type: blob.type }));
+  formData.append("model", WHISPER_MODEL);
+
+  let response;
+  try {
+    response = await postVoiceRecording(formData);
+  } catch {
+    voiceStatusEl.textContent = "Подключаю распознавание...";
+    await new Promise((resolve) => window.setTimeout(resolve, 1200));
+    try {
+      response = await postVoiceRecording(formData);
+    } catch {
+      throw new Error("Сервис распознавания временно недоступен.");
+    }
+  }
+
+  if (!response.ok) {
+    let message = `Ошибка распознавания: HTTP ${response.status}.`;
+    try {
+      const error = await response.json();
+      if (error.message) message = error.message;
+    } catch {
+      // Keep the HTTP fallback when the helper cannot provide JSON.
+    }
+    throw new Error(message);
+  }
+
+  const result = await response.json();
+  return typeof result.text === "string" ? result.text.trim() : "";
+}
+
+function postVoiceRecording(formData) {
+  return fetch(VOICE_TRANSCRIPTION_URL, {
+    method: "POST",
+    body: formData,
+  });
+}
+
+// -- End voice search -----------------------------------------------------------
+
 function collectTileUrls(tile) {
   if (tile?.type === "group") {
     return (tile.tiles || []).flatMap(collectTileUrls);

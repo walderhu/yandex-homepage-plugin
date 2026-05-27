@@ -7,7 +7,9 @@
     "newtab": "index.html"
   },
   "background": {
-    "service_worker": "background.js"
+    "scripts": [
+      "background.js"
+    ]
   },
   "permissions": [
     "bookmarks",
@@ -20,6 +22,11 @@
   ],
   "icons": {
     "128": "assets/icon.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "walderhu-newtab@local"
+    }
   },
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; img-src 'self' data: https:; connect-src http: https:;"
