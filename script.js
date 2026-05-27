@@ -680,6 +680,7 @@ function renderLinkTile(tile, index, draggable, groupIndex = null) {
   img.src = tile.image || faviconUrl(tile.url) || DEFAULT_PLACEHOLDER_IMAGE;
   img.alt = "";
   img.loading = "lazy";
+  img.addEventListener("load", () => { icon.style.background = "#ffffff"; });
   icon.append(img);
 
   const caption = document.createElement("span");
