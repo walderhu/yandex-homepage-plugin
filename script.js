@@ -110,6 +110,12 @@ tilesEl.addEventListener("click", (event) => {
   if (tile?.type === "group") {
     event.preventDefault();
     openGroupDialog([index]);
+    return;
+  }
+
+  if (tile?.url?.startsWith("chrome://") || tile?.url?.startsWith("thorium://")) {
+    event.preventDefault();
+    globalThis.chrome?.tabs?.create({ url: tile.url });
   }
 });
 
