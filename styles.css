@@ -627,7 +627,7 @@ a {
 
 .tile-form-main {
   display: grid;
-  grid-template-columns: 210px 1fr;
+  grid-template-columns: 160px 1fr;
   gap: 14px;
   align-items: start;
 }
@@ -674,9 +674,9 @@ a {
 
 .tile-image-preview {
   position: relative;
-  width: 210px;
-  height: 210px;
-  min-height: 210px;
+  width: 160px;
+  height: 160px;
+  min-height: 160px;
   border: 1px dashed #3d3d3d;
   border-radius: 12px;
   overflow: hidden;
