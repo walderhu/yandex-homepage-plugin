@@ -530,6 +530,32 @@ a {
   transform: translate(-50%, -50%) rotate(90deg) scale(1);
 }
 
+.group-add-tile {
+  position: relative;
+}
+
+.group-add-tile::before,
+.group-add-tile::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 34px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  opacity: 0.9;
+  transform: translate(-50%, -50%);
+}
+
+.group-add-tile::after {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.group-add-tile:hover {
+  background: #99999d;
+}
+
 .tile-menu,
 .group-tile-menu {
   position: fixed;

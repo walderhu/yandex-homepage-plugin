@@ -6,19 +6,75 @@ const NESTED_GROUP_TEST_ID = "nested-groups-v1";
 const YANDEX_IMAGE_UPLOAD_URL = "https://yandex.ru/images-apphost/image-download";
 const YANDEX_IMAGE_RESULT_URL = "https://yandex.ru/images/search?rpt=imageview&url=";
 
+const bookmarkTile = (title, url) => ({
+  title: title?.trim() || bookmarkTitleFromUrl(url),
+  url,
+});
+
+const bookmarkGroup = (title, tiles) => ({
+  type: "group",
+  title,
+  tiles,
+});
+
 const defaultTiles = [
-  {
-    title: "ALL in ONE 2.4GHz Gadg...",
-    url: "https://www.youtube.com/",
-  },
-  {
-    title: "Настройка панели задач",
-    url: "https://chatgpt.com/",
-  },
-  {
-    title: "Extensions",
-    url: "chrome://extensions/",
-  },
+  bookmarkGroup("Главное", [
+    bookmarkGroup("Каждый день", [
+      bookmarkTile("YouTube", "https://www.youtube.com/"),
+      bookmarkTile("Яндекс Переводчик", "https://translate.yandex.ru/"),
+      bookmarkTile("Pinterest", "https://ru.pinterest.com/"),
+    ]),
+    bookmarkGroup("Учёба и инструменты", [
+      bookmarkTile("Sci-Hub", "https://www.sci-hub.ru/"),
+      bookmarkTile("diagrams.net", "https://app.diagrams.net/?utm_source=chatgpt.com"),
+      bookmarkTile("ComfyVPN - Выбор сервера", "https://comfyvpn.pro/test-nodes.php"),
+    ]),
+    bookmarkGroup("Электроника", [
+      bookmarkTile("ESP32-S3 Camera", "http://192.168.4.1/"),
+      bookmarkTile("Tutorial ESP32-C3 Super Mini", "https://github.com/sidharthmohannair/Tutorial-ESP32-C3-Super-Mini"),
+      bookmarkTile("OLED-дисплей 128x64", "https://fastbox.su/pl-1/product/8080862722"),
+    ]),
+    bookmarkGroup("Видео и покупки", [
+      bookmarkTile("RuTube video", "https://rutube.ru/video/0932ff48acc7a9523dffb2d0c9181f22/"),
+      bookmarkTile("VK Video", "https://vk.com/video-87355422_456239153"),
+      bookmarkTile("Gamma Ultra", "https://ggsel.net/catalog/product/gamma-pro-1-mesiac-podpiski-4-0000-kreditov-akkaunt-102266203"),
+    ]),
+  ]),
+  bookmarkGroup("Школа 21", [
+    bookmarkTile("rocketchat-student.21-school.ru/home", "https://rocketchat-student.21-school.ru/home"),
+    bookmarkTile("https://platform.21-school.ru/", "https://platform.21-school.ru/"),
+  ]),
+  bookmarkGroup("Разработка", [
+    bookmarkTile("https://github.com/walderhu", "https://github.com/walderhu"),
+    bookmarkGroup("Linux, Git и ESP32", [
+      bookmarkTile("https://wokwi.com/esp32", "https://wokwi.com/esp32"),
+      bookmarkTile("https://ru.console-linux.com/?p=16738", "https://ru.console-linux.com/?p=16738"),
+      bookmarkTile("https://git-scm.com/docs/githooks", "https://git-scm.com/docs/githooks"),
+      bookmarkTile("https://wiki.archlinux.org/title/Core_utilities#Essentials", "https://wiki.archlinux.org/title/Core_utilities#Essentials"),
+      bookmarkTile("https://ru.linux-terminal.com/?p=398", "https://ru.linux-terminal.com/?p=398"),
+      bookmarkTile("https://r4ven.me/automation/kak-nauchitsya-pisat-bash-skripty-rekomenduemye-materialy/#%D1%88%D0%B0%D0%B3-0-%D0%BF%D1%80%D0%BE-%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D1%83-%D0%B2-%D0%BA%D0%BE%D0%BC%D0%B0%D0%BD%D0%B4%D0%BD%D0%BE%D0%B9-%D1%81%D1%82%D1%80%D0%BE%D0%BA%D0%B5", "https://r4ven.me/automation/kak-nauchitsya-pisat-bash-skripty-rekomenduemye-materialy/#%D1%88%D0%B0%D0%B3-0-%D0%BF%D1%80%D0%BE-%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D1%83-%D0%B2-%D0%BA%D0%BE%D0%BC%D0%B0%D0%BD%D0%B4%D0%BD%D0%BE%D0%B9-%D1%81%D1%82%D1%80%D0%BE%D0%BA%D0%B5"),
+    ]),
+  ]),
+  bookmarkGroup("Инструменты", [
+    bookmarkTile("https://webcammictest.com/ru/", "https://webcammictest.com/ru/"),
+    bookmarkTile("https://geotree.ru/karta-region?lat=55.17353&lon=48.28186&z=6&c=", "https://geotree.ru/karta-region?lat=55.17353&lon=48.28186&z=6&c="),
+  ]),
+  bookmarkGroup("Медиа", [
+    bookmarkGroup("видеохостинги", [
+      bookmarkTile("", "https://www.youtube.com/"),
+      bookmarkTile("", "https://www.youtube.com/watch?v=l6fyiqeytaA&list=LL&index=1&t=6399s"),
+      bookmarkTile("#11. L2-регуляризатор. Математическое обоснование и пример работы | Машинное обучение - смотреть видео онлайн от «SelfEdu - мир знаний с Сергеем Балакиревым» в хорошем качестве, опубликованное 3 сентября 2024 года в 9:37:31.", "https://rutube.ru/video/b9cf1d16200316f223a31e4b61a5fa47/?playlist=539289"),
+      bookmarkTile("", "https://inoriginal.net/series/1164-shameless-2011.html"),
+      bookmarkTile("torrent-films.cc", "https://torrent-films.cc/besstyzhie-serial-2011/"),
+      bookmarkTile("Видеохостинг RUTUBE. Смотрите видео онлайн, бесплатно.", "https://rutube.ru/"),
+      bookmarkTile("Американский Папаша 6 сезон 11 серия - смотреть видео онлайн от «Сериал Американский Папаша» в хорошем качестве, опубликованное 3 декабря 2023 года в 11:47:32.", "https://rutube.ru/video/4dfa891c8acceca253c5a09d3e1628d6/"),
+    ]),
+  ]),
+  bookmarkGroup("Старые плитки", [
+    bookmarkTile("ALL in ONE 2.4GHz Gadg...", "https://www.youtube.com/"),
+    bookmarkTile("Настройка панели задач", "https://chatgpt.com/"),
+    bookmarkTile("Extensions", "chrome://extensions/"),
+  ]),
 ];
 
 const tilesEl = document.querySelector(".tiles");
@@ -62,6 +118,7 @@ let draggedGroupTileIndex = null;
 let activeGroupTileIndex = null;
 let editingGroupPath = null;
 let editingGroupTileIndex = null;
+let creatingGroupPath = null;
 let isImageSearchRunning = false;
 let smartboxImagePreviewUrl = "";
 
@@ -286,6 +343,7 @@ groupDialogEl.addEventListener("close", () => {
   activeGroupPath = [];
   draggedGroupTileIndex = null;
   groupDialogEl.classList.remove("is-extract-target");
+  creatingGroupPath = null;
 });
 
 groupTilesEl.addEventListener("click", (event) => {
@@ -296,6 +354,16 @@ groupTilesEl.addEventListener("click", (event) => {
 
   event.preventDefault();
   openGroupDialog([...activeGroupPath, groupTileIndex]);
+});
+
+groupTilesEl.addEventListener("click", (event) => {
+  const addTile = event.target.closest(".group-add-tile");
+  if (!addTile) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  creatingGroupPath = [...activeGroupPath];
+  openTileDialog(null);
 });
 
 groupTilesEl.addEventListener("contextmenu", (event) => {
@@ -469,6 +537,7 @@ formEl.addEventListener("submit", async (event) => {
 
   const isEditingGroupTile = editingGroupTileIndex !== null;
   const isEditing = activeIndex !== null || isEditingGroupTile;
+  const isCreatingInGroup = !isEditing && Array.isArray(creatingGroupPath) && creatingGroupPath.length > 0;
 
   const tile = {
     title: titleInput.value.trim(),
@@ -480,6 +549,8 @@ formEl.addEventListener("submit", async (event) => {
     getGroupAtPath(editingGroupPath).tiles[editingGroupTileIndex] = tile;
   } else if (isEditing) {
     tiles[activeIndex] = tile;
+  } else if (isCreatingInGroup) {
+    getGroupAtPath(creatingGroupPath).tiles.push(tile);
   } else {
     tiles.push(tile);
   }
@@ -488,6 +559,7 @@ formEl.addEventListener("submit", async (event) => {
   renderTiles();
   editingGroupPath = null;
   editingGroupTileIndex = null;
+  creatingGroupPath = null;
   dialogEl.close();
 });
 
@@ -507,13 +579,76 @@ function loadTiles() {
   try {
     const savedTiles = JSON.parse(localStorage.getItem(TILE_STORAGE_KEY));
     if (Array.isArray(savedTiles)) {
-      return migrateTileUrls(savedTiles.filter((tile) => tile && !isTestTile(tile)));
+      return mergeTiles(
+        migrateTileUrls(savedTiles.filter((tile) => tile && !isTestTile(tile))),
+        defaultTiles,
+      );
     }
   } catch {
     localStorage.removeItem(TILE_STORAGE_KEY);
   }
 
   return [...defaultTiles];
+}
+
+function mergeTiles(savedTiles, defaults) {
+  let merged = cloneTiles(savedTiles);
+
+  for (const tile of defaults) {
+    merged = mergeTileInto(merged, tile);
+  }
+
+  return merged;
+}
+
+function mergeTileInto(items, tile) {
+  if (!tile) return items;
+
+  if (tile.type === "group") {
+    const groupIndex = items.findIndex((item) => item?.type === "group" && item.title === tile.title);
+    if (groupIndex === -1) {
+      return [...items, cloneTile(tile)];
+    }
+
+    const nextItems = [...items];
+    nextItems[groupIndex] = {
+      ...nextItems[groupIndex],
+      tiles: mergeTiles(nextItems[groupIndex].tiles || [], tile.tiles || []),
+    };
+    return nextItems;
+  }
+
+  const url = normalizeTileUrl(tile.url);
+  if (!url) return items;
+  if (items.some((item) => item?.type !== "group" && normalizeTileUrl(item?.url) === url)) {
+    return items;
+  }
+
+  return [...items, cloneTile(tile)];
+}
+
+function cloneTiles(items) {
+  return (items || []).map(cloneTile);
+}
+
+function cloneTile(tile) {
+  if (!tile) return tile;
+  if (tile.type === "group") {
+    return {
+      type: "group",
+      title: tile.title,
+      tiles: cloneTiles(tile.tiles || []),
+    };
+  }
+
+  return {
+    title: tile.title,
+    url: tile.url,
+  };
+}
+
+function normalizeTileUrl(value) {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function isTestTile(tile) {
@@ -809,6 +944,15 @@ function renderGroupChildTile(tile, groupIndex) {
   return renderLinkTile(tile, null, true, groupIndex);
 }
 
+function renderGroupAddTile() {
+  const button = document.createElement("button");
+  button.className = "tile placeholder group-add-tile";
+  button.type = "button";
+  button.setAttribute("aria-label", "Добавить плитку в группу");
+  button.title = "Добавить плитку в эту группу";
+  return button;
+}
+
 function getTilePreviewImage(tile) {
   if (tile.type === "group") {
     return getTilePreviewImage(tile.tiles[0] || {});
@@ -826,6 +970,7 @@ function renderPlaceholderTile() {
 }
 
 function openTileDialog(index) {
+  creatingGroupPath = null;
   editingGroupPath = null;
   editingGroupTileIndex = null;
   activeIndex = index;
@@ -849,6 +994,7 @@ function openGroupTileDialog(groupPath, groupTileIndex) {
   const tile = getGroupAtPath(groupPath)?.tiles?.[groupTileIndex];
   if (!tile) return;
 
+  creatingGroupPath = null;
   activeIndex = null;
   editingGroupPath = [...groupPath];
   editingGroupTileIndex = groupTileIndex;
@@ -874,6 +1020,7 @@ function openGroupDialog(path) {
   groupTitleEl.value = group.title;
   groupTilesEl.replaceChildren(
     ...group.tiles.map(renderGroupChildTile),
+    renderGroupAddTile(),
   );
   pageEl.classList.add("is-group-open");
   if (!groupDialogEl.open) groupDialogEl.show();
@@ -1093,7 +1240,14 @@ function extractTileFromGroup(groupTileIndex) {
   if (!group || !parentTiles || !group.tiles[groupTileIndex]) return;
 
   const [extractedTile] = group.tiles.splice(groupTileIndex, 1);
-  if (group.tiles.length === 1) {
+  if (group.tiles.length === 0) {
+    parentTiles.splice(groupIndex, 1);
+    if (path.length === 1) {
+      groupDialogEl.close();
+    } else {
+      openGroupDialog(path.slice(0, -1));
+    }
+  } else if (group.tiles.length === 1) {
     const [remainingTile] = group.tiles;
     parentTiles.splice(groupIndex, 1, remainingTile, extractedTile);
   } else {
@@ -1116,7 +1270,15 @@ function deleteTileFromGroup(groupPath, groupTileIndex) {
   if (tile.type === "group" && !window.confirm("Удалить группу и все плитки внутри?")) return;
 
   group.tiles.splice(groupTileIndex, 1);
-  if (group.tiles.length === 1) {
+  if (group.tiles.length === 0) {
+    const parentTiles = getParentTiles(groupPath);
+    parentTiles.splice(groupPath[groupPath.length - 1], 1);
+    if (groupPath.length === 1) {
+      groupDialogEl.close();
+    } else {
+      openGroupDialog(groupPath.slice(0, -1));
+    }
+  } else if (group.tiles.length === 1) {
     const parentTiles = getParentTiles(groupPath);
     parentTiles.splice(groupPath[groupPath.length - 1], 1, group.tiles[0]);
     if (groupPath.length === 1) {
